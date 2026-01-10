@@ -30,36 +30,50 @@ export const simpleAuth = {
         throw new Error('Password must be at least 4 characters');
       }
 
-      // Check if mobile already exists
-      const { data: existing } = await supabase
+      const trimmedMobile = mobile.trim();
+
+      // Check if mobile already exists - use maybeSingle() to handle no results gracefully
+      const { data: existing, error: checkError } = await supabase
         .from('app_users')
-        .select('*')
-        .eq('mobile', mobile.trim())
-        .single();
+        .select('mobile')
+        .eq('mobile', trimmedMobile)
+        .maybeSingle();
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        // PGRST116 is "not found" which is fine, other errors are real issues
+        throw checkError;
+      }
 
       if (existing) {
-        throw new Error('Mobile number already registered');
+        throw new Error(`This mobile number (${trimmedMobile}) is already registered. Please use login instead.`);
       }
 
       // Create new user
       const { data, error } = await supabase
         .from('app_users')
         .insert({
-          mobile: mobile.trim(),
+          mobile: trimmedMobile,
           password: password, // Plaintext storage as requested
-          username: username || mobile.trim(),
+          username: username || trimmedMobile,
           created_at: new Date().toISOString(),
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // Check for unique constraint violation
+        if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
+          throw new Error(`This mobile number (${trimmedMobile}) is already registered. Please use login instead.`);
+        }
+        throw error;
+      }
 
       toast.success('Account created successfully!');
       return { error: null, user: data };
     } catch (error: any) {
       console.error('Signup error:', error);
-      toast.error(error.message || 'Failed to create account. Please try again.');
+      const errorMessage = error.message || 'Failed to create account. Please try again.';
+      toast.error(errorMessage);
       return { error: error as Error, user: null };
     }
   },
@@ -184,30 +198,43 @@ export const simpleAuth = {
         throw new Error('Password must be at least 4 characters');
       }
 
-      // Check if mobile already exists
-      const { data: existing } = await supabase
+      const trimmedMobile = mobile.trim();
+
+      // Check if mobile already exists - use maybeSingle() to handle no results gracefully
+      const { data: existing, error: checkError } = await supabase
         .from('app_users')
-        .select('*')
-        .eq('mobile', mobile.trim())
-        .single();
+        .select('mobile')
+        .eq('mobile', trimmedMobile)
+        .maybeSingle();
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        // PGRST116 is "not found" which is fine, other errors are real issues
+        throw checkError;
+      }
 
       if (existing) {
-        throw new Error('Mobile number already registered');
+        throw new Error(`This mobile number (${trimmedMobile}) already exists. Please choose a different number.`);
       }
 
       // Create new user
       const { data, error } = await supabase
         .from('app_users')
         .insert({
-          mobile: mobile.trim(),
+          mobile: trimmedMobile,
           password: password, // Plaintext storage as requested
-          username: username || mobile.trim(),
+          username: username || trimmedMobile,
           created_at: new Date().toISOString(),
         })
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        // Check for unique constraint violation
+        if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
+          throw new Error(`This mobile number (${trimmedMobile}) already exists. Please choose a different number.`);
+        }
+        throw error;
+      }
 
       toast.success('User created successfully!');
       return { error: null, user: data };
