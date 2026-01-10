@@ -112,16 +112,24 @@ export default function Login() {
               Mobile Number
             </label>
             <input
-              type="tel"
+              type="text"
               value={mobile}
-              onChange={(e) => setMobile(e.target.value.replace(/\D/g, ''))}
+              onChange={(e) => {
+                // Allow admin username "issac" or numeric mobile numbers
+                const value = e.target.value;
+                if (value.toLowerCase().startsWith('issac') || /^\d*$/.test(value)) {
+                  setMobile(value);
+                } else if (value.length === 0) {
+                  setMobile('');
+                }
+              }}
               onKeyPress={(e) => {
                 if (e.key === 'Enter' && !loading) {
                   const passwordInput = document.querySelector('input[type="password"]') as HTMLInputElement;
                   passwordInput?.focus();
                 }
               }}
-              placeholder="Enter your mobile number"
+              placeholder={isSignup ? "Enter your mobile number" : "Enter mobile number or admin username"}
               className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none text-lg"
               autoFocus={!isSignup}
               maxLength={15}

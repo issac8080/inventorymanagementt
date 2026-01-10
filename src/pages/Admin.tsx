@@ -13,7 +13,9 @@ export default function Admin() {
 
   useEffect(() => {
     // Check if user is admin
-    if (!simpleAuth.isCurrentUserAdmin()) {
+    const isAdmin = simpleAuth.isCurrentUserAdmin();
+    if (!isAdmin) {
+      toast.error('Admin access required');
       navigate('/login');
       return;
     }
@@ -23,9 +25,18 @@ export default function Admin() {
 
   const loadUsers = async () => {
     setLoading(true);
-    const allUsers = await simpleAuth.getAllUsers();
-    setUsers(allUsers);
-    setLoading(false);
+    try {
+      const allUsers = await simpleAuth.getAllUsers();
+      setUsers(allUsers);
+      if (allUsers.length === 0) {
+        toast.error('No users found or failed to load users');
+      }
+    } catch (error) {
+      console.error('Failed to load users:', error);
+      toast.error('Failed to load users. Please check your connection.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleLogout = () => {

@@ -71,12 +71,25 @@ export const simpleAuth = {
         throw new Error('Please enter mobile number and password');
       }
 
-      // Check if admin login
-      if (this.isAdmin(mobile, password)) {
-        return { error: null, user: { id: 'admin', mobile: 'admin', password: '', username: 'Admin', created_at: '' }, isAdmin: true };
+      // Check if admin login (allow both mobile field and username)
+      const mobileOrUsername = mobile.trim().toLowerCase();
+      if (this.isAdmin(mobileOrUsername, password)) {
+        const adminUser: User = { 
+          id: 'admin', 
+          mobile: 'admin', 
+          password: '', 
+          username: 'Admin', 
+          created_at: new Date().toISOString() 
+        };
+        toast.success('Admin login successful!');
+        return { error: null, user: adminUser, isAdmin: true };
       }
 
-      // Regular user login
+      // Regular user login - validate mobile format
+      if (!/^\d{10,15}$/.test(mobile.trim())) {
+        throw new Error('Please enter a valid mobile number (10-15 digits)');
+      }
+
       const { data, error } = await supabase
         .from('app_users')
         .select('*')
@@ -100,15 +113,28 @@ export const simpleAuth = {
   // Get all users (admin only)
   async getAllUsers(): Promise<User[]> {
     try {
+      // Check if user is admin before fetching
+      if (!this.isCurrentUserAdmin()) {
+        throw new Error('Unauthorized: Admin access required');
+      }
+
       const { data, error } = await supabase
         .from('app_users')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase error:', error);
+        toast.error(`Failed to load users: ${error.message}`);
+        throw error;
+      }
+      
       return data || [];
-    } catch (error) {
+    } catch (error: any) {
       console.error('Get all users error:', error);
+      if (error.message && !error.message.includes('Unauthorized')) {
+        toast.error(error.message || 'Failed to load users');
+      }
       return [];
     }
   },
