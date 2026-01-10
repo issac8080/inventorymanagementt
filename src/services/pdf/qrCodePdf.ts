@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import QRCode from 'qrcode';
 import { Product } from '@/types';
+import { generateQRCodeUrl, extractItemCodeFromQR } from '@/utils/qrCodeUrl';
 
 export interface PDFOptions {
   layout: 'sticker' | 'a4';
@@ -62,8 +63,19 @@ async function generateA4Layout(
 
     const product = products[i];
     
+    // Ensure QR code contains URL (for backward compatibility with old products)
+    let qrValue = product.qrValue;
+    if (!qrValue.includes('http') && !qrValue.includes('https')) {
+      // Old format - just itemCode, convert to URL
+      qrValue = generateQRCodeUrl(product.itemCode);
+    } else if (!qrValue.includes('inventorymanagementt.vercel.app')) {
+      // Has URL but might be wrong format, regenerate
+      const itemCode = extractItemCodeFromQR(qrValue);
+      qrValue = generateQRCodeUrl(itemCode || product.itemCode);
+    }
+    
     // Generate QR code
-    const qrDataUrl = await QRCode.toDataURL(product.qrValue, {
+    const qrDataUrl = await QRCode.toDataURL(qrValue, {
       width: qrSize * 3.779527559, // Convert mm to pixels
       margin: 1
     });
@@ -91,8 +103,19 @@ async function generateStickerLayout(
   for (const product of products) {
     const qrSize = 30;
     
+    // Ensure QR code contains URL (for backward compatibility with old products)
+    let qrValue = product.qrValue;
+    if (!qrValue.includes('http') && !qrValue.includes('https')) {
+      // Old format - just itemCode, convert to URL
+      qrValue = generateQRCodeUrl(product.itemCode);
+    } else if (!qrValue.includes('inventorymanagementt.vercel.app')) {
+      // Has URL but might be wrong format, regenerate
+      const itemCode = extractItemCodeFromQR(qrValue);
+      qrValue = generateQRCodeUrl(itemCode || product.itemCode);
+    }
+    
     // Generate QR code
-    const qrDataUrl = await QRCode.toDataURL(product.qrValue, {
+    const qrDataUrl = await QRCode.toDataURL(qrValue, {
       width: qrSize * 3.779527559,
       margin: 1
     });

@@ -7,6 +7,7 @@ import { productDb, warrantyDb } from '@/services/database/db';
 import { Product, WarrantyDocument } from '@/types';
 import { getWarrantyStatus } from '@/utils/warrantyCalculator';
 import { formatDate } from '@/utils/dateUtils';
+import { extractItemCodeFromQR } from '@/utils/qrCodeUrl';
 import { playBeep } from '@/utils/sounds';
 import toast from 'react-hot-toast';
 import jsPDF from 'jspdf';
@@ -22,6 +23,15 @@ export default function GetWarranty() {
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [showResults, setShowResults] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
+
+  // Cleanup warranty image URL on unmount or when product changes
+  useEffect(() => {
+    return () => {
+      if (warrantyImageUrl) {
+        URL.revokeObjectURL(warrantyImageUrl);
+      }
+    };
+  }, [warrantyImageUrl]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -182,14 +192,27 @@ export default function GetWarranty() {
         setProduct(foundProduct);
         
         // Load warranty document
-        const doc = await warrantyDb.getByProductId(foundProduct.id);
-        if (doc) {
-          setWarrantyDoc(doc);
-          const imageUrl = URL.createObjectURL(doc.imageBlob);
-          setWarrantyImageUrl(imageUrl);
-        } else {
+        try {
+          const doc = await warrantyDb.getByProductId(foundProduct.id);
+          if (doc) {
+            setWarrantyDoc(doc);
+            try {
+              const imageUrl = URL.createObjectURL(doc.imageBlob);
+              setWarrantyImageUrl(imageUrl);
+            } catch (blobError) {
+              console.error('Error creating image URL from blob:', blobError);
+              setWarrantyImageUrl(null);
+            }
+          } else {
+            setWarrantyDoc(null);
+            setWarrantyImageUrl(null);
+          }
+        } catch (warrantyError) {
+          console.error('Error loading warranty document:', warrantyError);
           setWarrantyDoc(null);
           setWarrantyImageUrl(null);
+          // Don't fail the whole search if warranty loading fails
+          toast.error('Product found, but warranty document could not be loaded');
         }
         
         playBeep('success');
@@ -217,11 +240,18 @@ export default function GetWarranty() {
       return;
     }
     setShowQRScanner(false);
-    setSearchInput(qrCode.trim());
+    // Extract itemCode from QR code (handles both URL and plain itemCode)
+    const itemCode = extractItemCodeFromQR(qrCode);
+    if (!itemCode) {
+      toast.error('Could not extract product code from QR code');
+      return;
+    }
+    setSearchInput(itemCode);
     setSearchMethod('itemCode');
-    // Search immediately with the QR code value
-    handleSearch(qrCode.trim()).catch(err => {
+    // Search immediately with the extracted itemCode
+    handleSearch(itemCode).catch(err => {
       console.error('Search error in QR scan:', err);
+      toast.error('Failed to search product. Please try again.');
     });
   }, [handleSearch]);
 
