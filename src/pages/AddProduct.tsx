@@ -6,6 +6,7 @@ import { Card } from '@/components/common/Card';
 import { BarcodeScanner } from '@/components/scanner/BarcodeScanner';
 import { lookupProductByBarcode } from '@/services/barcode/productLookup';
 import { generateItemCode } from '@/utils/itemCodeGenerator';
+import { generateQRCodeUrl } from '@/utils/qrCodeUrl';
 import { productDb, warrantyDb } from '@/services/database/db';
 import { useProductStore } from '@/stores/productStore';
 import { validateProduct } from '@/utils/validation';
@@ -113,8 +114,8 @@ export default function AddProduct() {
       // Generate item code
       const itemCode = await generateItemCode(validation.data.category);
       
-      // Generate QR code
-      const qrValue = itemCode;
+      // Generate QR code URL
+      const qrValue = generateQRCodeUrl(itemCode);
 
       const newProduct: Product = {
         id: generateUUID(),

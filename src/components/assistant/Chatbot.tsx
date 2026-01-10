@@ -8,6 +8,7 @@ import { Product } from '@/types';
 import { getWarrantyStatus } from '@/utils/warrantyCalculator';
 import { formatDate } from '@/utils/dateUtils';
 import { generateItemCode } from '@/utils/itemCodeGenerator';
+import { generateQRCodeUrl } from '@/utils/qrCodeUrl';
 import { generateUUID } from '@/utils/uuid';
 import { playBeep } from '@/utils/sounds';
 import toast from 'react-hot-toast';
@@ -110,7 +111,7 @@ export function Chatbot({ onProductSelect }: ChatbotProps) {
     try {
       setIsProcessing(true);
       const itemCode = await generateItemCode(productData.category || 'Other');
-      const qrValue = itemCode;
+      const qrValue = generateQRCodeUrl(itemCode);
 
       const newProduct: Product = {
         id: generateUUID(),

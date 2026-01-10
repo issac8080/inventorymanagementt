@@ -57,7 +57,7 @@ export function useBarcodeScanner() {
       await scanner.start(
         cameraId,
         {
-          fps: 30, // Higher FPS for better scanning
+          fps: 10, // Lower FPS for better mobile performance
           qrbox: (viewfinderWidth, viewfinderHeight) => {
             // For barcodes, use a wider scanning area (barcodes are horizontal)
             // Use 90% width and 50% height for better barcode detection
@@ -72,10 +72,12 @@ export function useBarcodeScanner() {
           disableFlip: false, // Allow rotation for better scanning
           videoConstraints: {
             facingMode: { ideal: 'environment' },
-            width: { ideal: 1280 },
-            height: { ideal: 720 }
+            // More flexible constraints for mobile devices
+            width: { min: 320, ideal: 1280, max: 1920 },
+            height: { min: 240, ideal: 720, max: 1080 }
           },
           // html5-qrcode supports both QR codes and barcodes by default
+          // No need to specify formats - it will detect automatically
         },
         (decodedText) => {
           // Don't stop immediately - let the callback handle it

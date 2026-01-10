@@ -8,6 +8,7 @@ import { productDb } from '@/services/database/db';
 import { useProductStore } from '@/stores/productStore';
 import { Product } from '@/types';
 import { generateItemCode } from '@/utils/itemCodeGenerator';
+import { generateQRCodeUrl } from '@/utils/qrCodeUrl';
 import { generateUUID } from '@/utils/uuid';
 import { validateProduct, BulkImportRowSchema } from '@/utils/validation';
 import { handleError } from '@/utils/errorHandler';
@@ -288,7 +289,7 @@ export function BulkImport({ isOpen, onClose, onImportComplete }: BulkImportProp
             name: row.name.trim(),
             category: row.category.trim(),
             barcode: row.barcode?.trim() || undefined,
-            qrValue: itemCode,
+            qrValue: generateQRCodeUrl(itemCode),
             warrantyStart: warranty.warrantyStart,
             warrantyEnd: warranty.warrantyEnd,
             warrantyDuration: warranty.warrantyDuration,

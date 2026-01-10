@@ -9,6 +9,7 @@ import { productDb, warrantyDb } from '@/services/database/db';
 import { Product, WarrantyDocument } from '@/types';
 import { formatDate, getWarrantyStatus } from '@/utils/warrantyCalculator';
 import { formatDate as formatDateUtil } from '@/utils/dateUtils';
+import { extractItemCodeFromQR } from '@/utils/qrCodeUrl';
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog';
 import { playBeep } from '@/utils/sounds';
 import toast from 'react-hot-toast';
@@ -76,7 +77,9 @@ export default function ProductDetail() {
       return;
     }
     playBeep('scan');
-    navigate(`/product/${qrCode.trim()}`);
+    // Extract itemCode from QR code (handles both URL and plain itemCode)
+    const itemCode = extractItemCodeFromQR(qrCode);
+    navigate(`/product/${itemCode}`);
   }, [navigate]);
 
   if (loading) {

@@ -8,6 +8,7 @@ import { BulkImport } from '@/components/bulk/BulkImport';
 import { productDb } from '@/services/database/db';
 import { Product } from '@/types';
 import { playBeep } from '@/utils/sounds';
+import { extractItemCodeFromQR } from '@/utils/qrCodeUrl';
 import toast from 'react-hot-toast';
 
 // Audit page for inventory management
@@ -44,8 +45,9 @@ export default function Audit() {
     }
 
     playBeep('scan');
-    // QR code contains itemCode
-    const product = allProducts.find((p) => p.itemCode === qrCode.trim());
+    // Extract itemCode from QR code (handles both URL and plain itemCode)
+    const itemCode = extractItemCodeFromQR(qrCode);
+    const product = allProducts.find((p) => p.itemCode === itemCode);
     if (product) {
       setFoundItems((prev) => {
         const newSet = new Set(prev);
