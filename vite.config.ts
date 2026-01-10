@@ -11,9 +11,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'icons/*.png'],
       manifest: {
-        name: 'Home Inventory & Warranty',
-        short_name: 'Home Inventory',
-        description: 'Manage your home products and warranty cards easily',
+        name: 'Initra – Home Inventory Management App',
+        short_name: 'Initra',
+        description: 'Initra – Home Inventory Management App by Issac',
         theme_color: '#1e40af',
         background_color: '#ffffff',
         display: 'standalone',

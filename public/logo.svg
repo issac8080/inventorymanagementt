@@ -1,0 +1,52 @@
+<svg width="200" height="120" viewBox="0 0 200 120" xmlns="http://www.w3.org/2000/svg">
+  <!-- House/Envelope Shape -->
+  <defs>
+    <linearGradient id="houseGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4FD1C7;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3182CE;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#4FD1C7;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#3182CE;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="checkGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#63B3ED;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2C5282;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Main house/envelope shape -->
+  <path d="M 20 20 Q 20 10 30 10 L 70 10 Q 80 10 80 20 L 80 50 Q 80 60 70 60 L 30 60 Q 20 60 20 50 Z" 
+        fill="url(#houseGradient)" 
+        stroke="url(#houseGradient)" 
+        stroke-width="2"/>
+  
+  <!-- Horizontal line (roofline/flap) -->
+  <line x1="25" y1="25" x2="75" y2="25" 
+        stroke="url(#lineGradient)" 
+        stroke-width="2.5" 
+        stroke-linecap="round"/>
+  
+  <!-- Checkmark -->
+  <path d="M 45 35 L 55 45 L 70 30" 
+        fill="none" 
+        stroke="url(#checkGradient)" 
+        stroke-width="3" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"/>
+  
+  <!-- Initra Text -->
+  <text x="100" y="45" 
+        font-family="Arial, sans-serif" 
+        font-size="28" 
+        font-weight="bold" 
+        fill="#2D3748">Initra</text>
+  
+  <!-- by Issac Text -->
+  <text x="100" y="65" 
+        font-family="Arial, sans-serif" 
+        font-size="14" 
+        font-weight="normal" 
+        fill="#2D3748">by Issac</text>
+</svg>
+

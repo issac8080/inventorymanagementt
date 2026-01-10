@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Download, Printer } from 'lucide-react';
 import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
-import { productDb } from '@/services/database/localDb';
+import { productDb } from '@/services/database/db';
 import { Product } from '@/types';
 import { generateQRCodePDF } from '@/services/pdf/qrCodePdf';
 import toast from 'react-hot-toast';

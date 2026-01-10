@@ -6,7 +6,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { Product } from '@/types';
-import { productDb } from '@/services/database/localDb';
+import { productDb } from '@/services/database/db';
 import { handleError } from '@/utils/errorHandler';
 
 interface ProductStore {

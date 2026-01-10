@@ -1,4 +1,6 @@
-# Home Inventory & Warranty Management Web App
+# Initra – Home Inventory Management App
+
+**by Issac**
 
 A mobile-first Progressive Web App (PWA) for managing home products and warranty cards, optimized for elderly users (50-60 age group) with offline-first architecture.
 

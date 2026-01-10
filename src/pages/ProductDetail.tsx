@@ -5,7 +5,7 @@ import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
 import { QRCodeGenerator } from '@/components/qrcode/QRCodeGenerator';
 import { QRScanner } from '@/components/scanner/QRScanner';
-import { productDb, warrantyDb } from '@/services/database/localDb';
+import { productDb, warrantyDb } from '@/services/database/db';
 import { Product, WarrantyDocument } from '@/types';
 import { formatDate, getWarrantyStatus } from '@/utils/warrantyCalculator';
 import { formatDate as formatDateUtil } from '@/utils/dateUtils';

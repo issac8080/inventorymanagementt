@@ -1,0 +1,145 @@
+import { supabase } from '../database/supabase';
+import toast from 'react-hot-toast';
+
+export interface User {
+  id: string;
+  mobile: string;
+  password: string; // Plaintext - as requested
+  username?: string;
+  created_at: string;
+}
+
+// Hardcoded admin credentials
+const ADMIN_USERNAME = 'issac';
+const ADMIN_PASSWORD = 'antonio';
+
+export const simpleAuth = {
+  // Check if user is admin
+  isAdmin(username: string, password: string): boolean {
+    return username.toLowerCase() === ADMIN_USERNAME.toLowerCase() && password === ADMIN_PASSWORD;
+  },
+
+  // Sign up with mobile and password
+  async signup(mobile: string, password: string, username?: string): Promise<{ error: Error | null; user: User | null }> {
+    try {
+      if (!mobile || mobile.trim().length < 10) {
+        throw new Error('Please enter a valid mobile number (at least 10 digits)');
+      }
+
+      if (!password || password.length < 4) {
+        throw new Error('Password must be at least 4 characters');
+      }
+
+      // Check if mobile already exists
+      const { data: existing } = await supabase
+        .from('app_users')
+        .select('*')
+        .eq('mobile', mobile.trim())
+        .single();
+
+      if (existing) {
+        throw new Error('Mobile number already registered');
+      }
+
+      // Create new user
+      const { data, error } = await supabase
+        .from('app_users')
+        .insert({
+          mobile: mobile.trim(),
+          password: password, // Plaintext storage as requested
+          username: username || mobile.trim(),
+          created_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast.success('Account created successfully!');
+      return { error: null, user: data };
+    } catch (error: any) {
+      console.error('Signup error:', error);
+      toast.error(error.message || 'Failed to create account. Please try again.');
+      return { error: error as Error, user: null };
+    }
+  },
+
+  // Login with mobile and password
+  async login(mobile: string, password: string): Promise<{ error: Error | null; user: User | null; isAdmin: boolean }> {
+    try {
+      if (!mobile || !password) {
+        throw new Error('Please enter mobile number and password');
+      }
+
+      // Check if admin login
+      if (this.isAdmin(mobile, password)) {
+        return { error: null, user: { id: 'admin', mobile: 'admin', password: '', username: 'Admin', created_at: '' }, isAdmin: true };
+      }
+
+      // Regular user login
+      const { data, error } = await supabase
+        .from('app_users')
+        .select('*')
+        .eq('mobile', mobile.trim())
+        .eq('password', password) // Direct comparison - plaintext
+        .single();
+
+      if (error || !data) {
+        throw new Error('Invalid mobile number or password');
+      }
+
+      toast.success('Logged in successfully!');
+      return { error: null, user: data, isAdmin: false };
+    } catch (error: any) {
+      console.error('Login error:', error);
+      toast.error(error.message || 'Invalid mobile number or password.');
+      return { error: error as Error, user: null, isAdmin: false };
+    }
+  },
+
+  // Get all users (admin only)
+  async getAllUsers(): Promise<User[]> {
+    try {
+      const { data, error } = await supabase
+        .from('app_users')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data || [];
+    } catch (error) {
+      console.error('Get all users error:', error);
+      return [];
+    }
+  },
+
+  // Logout
+  logout(): void {
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('isAdmin');
+    toast.success('Logged out successfully!');
+  },
+
+  // Get current user from localStorage
+  getCurrentUser(): User | null {
+    const userStr = localStorage.getItem('currentUser');
+    if (!userStr) return null;
+    try {
+      return JSON.parse(userStr);
+    } catch {
+      return null;
+    }
+  },
+
+  // Check if current user is admin
+  isCurrentUserAdmin(): boolean {
+    return localStorage.getItem('isAdmin') === 'true';
+  },
+
+  // Save user to localStorage
+  saveUser(user: User, isAdmin: boolean = false): void {
+    localStorage.setItem('currentUser', JSON.stringify(user));
+    localStorage.setItem('isAdmin', isAdmin.toString());
+  },
+};
+

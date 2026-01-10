@@ -1,4 +1,4 @@
-import { productDb } from '@/services/database/localDb';
+import { productDb } from '@/services/database/db';
 
 /**
  * Maps category names to their abbreviated codes

@@ -1,7 +1,7 @@
 {
-  "name": "Home Inventory & Warranty",
-  "short_name": "Home Inventory",
-  "description": "Manage your home products and warranty cards easily",
+  "name": "Initra – Home Inventory Management App",
+  "short_name": "Initra",
+  "description": "Initra – Home Inventory Management App by Issac",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",

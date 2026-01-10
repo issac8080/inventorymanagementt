@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MessageCircle, X, Send, Mic, MicOff, ExternalLink, Plus } from 'lucide-react';
 import { Button } from '@/components/common/Button';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
-import { productDb } from '@/services/database/localDb';
+import { productDb } from '@/services/database/db';
 import { Product } from '@/types';
 import { getWarrantyStatus } from '@/utils/warrantyCalculator';
 import { formatDate } from '@/utils/dateUtils';

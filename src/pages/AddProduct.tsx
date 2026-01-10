@@ -6,7 +6,7 @@ import { Card } from '@/components/common/Card';
 import { BarcodeScanner } from '@/components/scanner/BarcodeScanner';
 import { lookupProductByBarcode } from '@/services/barcode/productLookup';
 import { generateItemCode } from '@/utils/itemCodeGenerator';
-import { productDb, warrantyDb } from '@/services/database/localDb';
+import { productDb, warrantyDb } from '@/services/database/db';
 import { useProductStore } from '@/stores/productStore';
 import { validateProduct } from '@/utils/validation';
 import { handleError } from '@/utils/errorHandler';

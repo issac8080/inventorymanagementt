@@ -5,7 +5,7 @@ import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
 import { QRScanner } from '@/components/scanner/QRScanner';
 import { BulkImport } from '@/components/bulk/BulkImport';
-import { productDb } from '@/services/database/localDb';
+import { productDb } from '@/services/database/db';
 import { Product } from '@/types';
 import { playBeep } from '@/utils/sounds';
 import toast from 'react-hot-toast';

@@ -3,7 +3,7 @@
  * Allows users to backup and restore their data
  */
 
-import { db, productDb, warrantyDb } from '@/services/database/localDb';
+import { productDb, warrantyDb } from '@/services/database/db';
 import { Product, WarrantyDocument } from '@/types';
 import { handleError, ErrorCode } from './errorHandler';
 import toast from 'react-hot-toast';
@@ -26,10 +26,18 @@ export interface DatabaseExport {
 export async function exportDatabase(): Promise<Blob> {
   try {
     const products = await productDb.getAll();
-    const warrantyDocs = await db.warrantyDocuments.toArray();
+    
+    // Get all warranty documents for all products
+    const warrantyDocs: WarrantyDocument[] = [];
+    for (const product of products) {
+      const warranty = await warrantyDb.getByProductId(product.id);
+      if (warranty) {
+        warrantyDocs.push(warranty);
+      }
+    }
     
     const exportData: DatabaseExport = {
-      version: db.verno,
+      version: 1,
       exportDate: new Date().toISOString(),
       products,
       warrantyDocuments: warrantyDocs,
@@ -126,15 +134,14 @@ export async function importDatabase(file: File): Promise<{
         // Check if warranty already exists
         const existing = await warrantyDb.getByProductId(warranty.productId);
         if (existing) {
-          // Update existing warranty
-          await db.warrantyDocuments.update(existing.id, warranty);
-        } else {
-          // Add new warranty
-          await warrantyDb.add({
-            ...warranty,
-            createdAt: warranty.createdAt ? new Date(warranty.createdAt) : new Date(),
-          });
+          // Delete existing and add new one (since we don't have update method)
+          await warrantyDb.delete(existing.id);
         }
+        // Add new warranty
+        await warrantyDb.add({
+          ...warranty,
+          createdAt: warranty.createdAt ? new Date(warranty.createdAt) : new Date(),
+        });
         importedWarranties++;
       } catch (error) {
         errors.push(`Failed to import warranty for product ${warranty.productId}: ${error}`);
@@ -165,11 +172,17 @@ export async function importDatabase(file: File): Promise<{
 
 /**
  * Clear all database data (use with caution!)
+ * Note: This will delete all products and warranties for the current user
  */
 export async function clearDatabase(): Promise<void> {
   try {
-    await db.products.clear();
-    await db.warrantyDocuments.clear();
+    const products = await productDb.getAll();
+    
+    // Delete all products (this will cascade delete warranties)
+    for (const product of products) {
+      await productDb.delete(product.id);
+    }
+    
     toast.success('Database cleared successfully');
   } catch (error) {
     const appError = handleError(error, 'Database clear failed');

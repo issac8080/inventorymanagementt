@@ -4,7 +4,7 @@ import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
 import { Modal } from '@/components/common/Modal';
 import { ProgressBar } from '@/components/common/ProgressBar';
-import { productDb } from '@/services/database/localDb';
+import { productDb } from '@/services/database/db';
 import { useProductStore } from '@/stores/productStore';
 import { Product } from '@/types';
 import { generateItemCode } from '@/utils/itemCodeGenerator';

@@ -22,13 +22,14 @@ export default function Home() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 overflow-y-auto">
       <div className="p-3 sm:p-4 max-w-4xl mx-auto">
         <header className="text-center mb-6 sm:mb-8 pt-2 sm:pt-4">
-          <div className="flex items-center justify-center gap-1 sm:gap-2 mb-2">
-            <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-500 animate-pulse" />
-            <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
-              Home Inventory
-            </h1>
-            <Sparkles className="w-6 h-6 sm:w-8 sm:h-8 text-yellow-500 animate-pulse" />
+          <div className="flex justify-center mb-4">
+            <img src="/initr.png" alt="Initra Logo" className="h-24 sm:h-32 object-contain" />
           </div>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-1">
+            Initra – Home Inventory Management App
+            <br />
+            <span className="text-xl sm:text-2xl md:text-3xl">by Issac</span>
+          </h1>
           <p className="text-lg sm:text-xl md:text-2xl text-gray-700 font-semibold px-2">
             Manage your products and warranty cards
           </p>

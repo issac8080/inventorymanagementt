@@ -1,10 +1,17 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Home, Plus, Package, Search, FileText, Shield, Menu, X, Settings } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Home, Plus, Package, Search, FileText, Shield, Menu, X, Settings, LogOut } from 'lucide-react';
+import { simpleAuth } from '@/services/auth/simpleAuth';
 
 export function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const handleLogout = () => {
+    simpleAuth.logout();
+    navigate('/login');
+  };
 
   const navItems = [
     { path: '/', label: 'Home', icon: Home },
@@ -40,14 +47,23 @@ export function Navbar() {
       <div className="max-w-7xl mx-auto px-2 sm:px-4">
         <div className="flex items-center justify-between h-16 sm:h-18">
           {/* Logo/Brand */}
-          <Link to="/" className="flex items-center gap-1 sm:gap-2 font-bold text-lg sm:text-xl hover:scale-105 transition-transform">
-            <div className="bg-white bg-opacity-20 rounded-full p-1.5 sm:p-2">
-              <Package className="w-5 h-5 sm:w-6 sm:h-6" />
+          <Link to="/" className="flex items-center gap-1 sm:gap-2 font-bold hover:scale-105 transition-transform">
+            <img src="/initr.png" alt="Initra" className="w-8 h-8 sm:w-10 sm:h-10 object-contain" />
+            <div className="hidden xl:flex flex-col leading-tight">
+              <span className="text-xs bg-gradient-to-r from-yellow-200 to-yellow-400 bg-clip-text text-transparent">
+                Initra – Home Inventory Management App
+              </span>
+              <span className="text-xs bg-gradient-to-r from-yellow-200 to-yellow-400 bg-clip-text text-transparent">
+                by Issac
+              </span>
             </div>
-            <span className="hidden sm:inline bg-gradient-to-r from-yellow-200 to-yellow-400 bg-clip-text text-transparent">
-              Home Inventory
+            <span className="hidden md:inline xl:hidden bg-gradient-to-r from-yellow-200 to-yellow-400 bg-clip-text text-transparent text-xs sm:text-sm">
+              Initra – Home Inventory Management App by Issac
             </span>
-            <span className="sm:hidden text-yellow-200">Inventory</span>
+            <span className="hidden sm:inline md:hidden bg-gradient-to-r from-yellow-200 to-yellow-400 bg-clip-text text-transparent text-xs">
+              Initra by Issac
+            </span>
+            <span className="sm:hidden text-yellow-200 text-xs">Initra</span>
           </Link>
 
           {/* Desktop Menu */}
@@ -71,6 +87,14 @@ export function Navbar() {
                 </Link>
               );
             })}
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-300 hover:bg-white hover:bg-opacity-15 hover:scale-105"
+              title="Logout"
+            >
+              <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span className="text-sm sm:text-base">Logout</span>
+            </button>
           </div>
 
           {/* Mobile Menu Button */}
@@ -112,6 +136,18 @@ export function Navbar() {
                 </Link>
               );
             })}
+            <button
+              onClick={() => {
+                setIsMobileMenuOpen(false);
+                handleLogout();
+              }}
+              className="flex items-center gap-3 px-4 py-4 rounded-xl transition-all duration-300 bg-white bg-opacity-10 hover:bg-opacity-20 w-full"
+            >
+              <div className="p-2 rounded-lg bg-white bg-opacity-10">
+                <LogOut className="w-5 h-5" />
+              </div>
+              <span className="text-lg font-semibold">Logout</span>
+            </button>
           </div>
         )}
       </div>
