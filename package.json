@@ -17,6 +17,7 @@
     "prepare": "husky install"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
     "date-fns": "^2.30.0",
     "dexie": "^3.2.4",
     "html5-qrcode": "^2.3.8",
