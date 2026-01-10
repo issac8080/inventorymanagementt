@@ -1,6 +1,13 @@
 import { supabase } from '../database/supabase';
 import toast from 'react-hot-toast';
 
+// Check if Supabase is properly configured
+const isSupabaseConfigured = () => {
+  const url = import.meta.env.VITE_SUPABASE_URL;
+  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+  return url && key && !url.includes('placeholder') && !key.includes('placeholder');
+};
+
 export interface User {
   id: string;
   mobile: string;
@@ -28,6 +35,11 @@ export const simpleAuth = {
 
       if (!password || password.length < 4) {
         throw new Error('Password must be at least 4 characters');
+      }
+
+      // Check if Supabase is configured
+      if (!isSupabaseConfigured()) {
+        throw new Error('Database connection not configured. Please contact administrator.');
       }
 
       const trimmedMobile = mobile.trim();
@@ -65,6 +77,10 @@ export const simpleAuth = {
         if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
           throw new Error(`This mobile number (${trimmedMobile}) is already registered. Please use login instead.`);
         }
+        // Network or connection errors
+        if (error.message?.includes('fetch') || error.message?.includes('network')) {
+          throw new Error('Network error. Please check your internet connection and try again.');
+        }
         throw error;
       }
 
@@ -100,18 +116,38 @@ export const simpleAuth = {
       }
 
       // Regular user login - validate mobile format
-      if (!/^\d{10,15}$/.test(mobile.trim())) {
+      const trimmedMobile = mobile.trim();
+      if (!/^\d{10,15}$/.test(trimmedMobile)) {
         throw new Error('Please enter a valid mobile number (10-15 digits)');
+      }
+
+      // Check if Supabase is configured
+      if (!isSupabaseConfigured()) {
+        throw new Error('Database connection not configured. Please contact administrator.');
       }
 
       const { data, error } = await supabase
         .from('app_users')
         .select('*')
-        .eq('mobile', mobile.trim())
+        .eq('mobile', trimmedMobile)
         .eq('password', password) // Direct comparison - plaintext
-        .single();
+        .maybeSingle();
 
-      if (error || !data) {
+      // Handle Supabase errors
+      if (error) {
+        // PGRST116 is "not found" - user doesn't exist
+        if (error.code === 'PGRST116') {
+          throw new Error('Invalid mobile number or password');
+        }
+        // Network or connection errors
+        if (error.message?.includes('fetch') || error.message?.includes('network')) {
+          throw new Error('Network error. Please check your internet connection and try again.');
+        }
+        throw new Error(`Login failed: ${error.message || 'Unknown error'}`);
+      }
+
+      // No data means user not found
+      if (!data) {
         throw new Error('Invalid mobile number or password');
       }
 
@@ -130,6 +166,11 @@ export const simpleAuth = {
       // Check if user is admin before fetching
       if (!this.isCurrentUserAdmin()) {
         throw new Error('Unauthorized: Admin access required');
+      }
+
+      // Check if Supabase is configured
+      if (!isSupabaseConfigured()) {
+        throw new Error('Database connection not configured. Please contact administrator.');
       }
 
       const { data, error } = await supabase
@@ -196,6 +237,11 @@ export const simpleAuth = {
 
       if (!password || password.length < 4) {
         throw new Error('Password must be at least 4 characters');
+      }
+
+      // Check if Supabase is configured
+      if (!isSupabaseConfigured()) {
+        throw new Error('Database connection not configured. Please contact administrator.');
       }
 
       const trimmedMobile = mobile.trim();

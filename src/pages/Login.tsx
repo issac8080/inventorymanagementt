@@ -19,23 +19,35 @@ export default function Login() {
     }
 
     setLoading(true);
-    const { error, user, isAdmin } = await simpleAuth.login(mobile, password);
-    setLoading(false);
+    try {
+      const { error, user, isAdmin } = await simpleAuth.login(mobile, password);
+      
+      if (error) {
+        // Error is already shown via toast in simpleAuth.login
+        setLoading(false);
+        return;
+      }
 
-    if (!error && user) {
-      simpleAuth.saveUser(user, isAdmin);
-      
-      // Trigger event to notify App component
-      window.dispatchEvent(new Event('userLogin'));
-      
-      // Small delay to ensure state updates
-      setTimeout(() => {
-        if (isAdmin) {
-          navigate('/admin');
-        } else {
-          navigate('/');
-        }
-      }, 100);
+      if (user) {
+        simpleAuth.saveUser(user, isAdmin);
+        
+        // Trigger event to notify App component
+        window.dispatchEvent(new Event('userLogin'));
+        
+        // Small delay to ensure state updates
+        setTimeout(() => {
+          if (isAdmin) {
+            navigate('/admin');
+          } else {
+            navigate('/');
+          }
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Login handler error:', error);
+      // Error should already be handled by simpleAuth.login
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -51,19 +63,31 @@ export default function Login() {
     }
 
     setLoading(true);
-    const { error, user } = await simpleAuth.signup(mobile, password);
-    setLoading(false);
+    try {
+      const { error, user } = await simpleAuth.signup(mobile, password);
+      
+      if (error) {
+        // Error is already shown via toast in simpleAuth.signup
+        setLoading(false);
+        return;
+      }
 
-    if (!error && user) {
-      simpleAuth.saveUser(user, false);
-      
-      // Trigger event to notify App component
-      window.dispatchEvent(new Event('userLogin'));
-      
-      // Small delay to ensure state updates
-      setTimeout(() => {
-        navigate('/');
-      }, 100);
+      if (user) {
+        simpleAuth.saveUser(user, false);
+        
+        // Trigger event to notify App component
+        window.dispatchEvent(new Event('userLogin'));
+        
+        // Small delay to ensure state updates
+        setTimeout(() => {
+          navigate('/');
+        }, 100);
+      }
+    } catch (error) {
+      console.error('Signup handler error:', error);
+      // Error should already be handled by simpleAuth.signup
+    } finally {
+      setLoading(false);
     }
   };
 
