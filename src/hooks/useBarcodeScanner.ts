@@ -25,16 +25,29 @@ export function useBarcodeScanner() {
         }
       }
 
-      // Create unique container element if it doesn't exist
+      // Wait a bit for the DOM to be ready
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Find or create container element
       let container = document.getElementById(containerId.current);
       if (!container) {
+        const parent = document.querySelector('.barcode-scanner-parent');
+        if (!parent) {
+          throw new Error('Scanner container parent not found');
+        }
         container = document.createElement('div');
         container.id = containerId.current;
         container.className = 'w-full h-full';
-        const parent = document.querySelector('.barcode-scanner-parent');
-        if (parent) {
-          parent.appendChild(container);
-        }
+        container.style.width = '100%';
+        container.style.height = '100%';
+        parent.appendChild(container);
+      }
+
+      // Ensure container is visible and has dimensions
+      if (container) {
+        container.style.display = 'block';
+        container.style.width = '100%';
+        container.style.height = '100%';
       }
 
       const scanner = new Html5Qrcode(containerId.current);
@@ -70,11 +83,9 @@ export function useBarcodeScanner() {
           },
           aspectRatio: 1.777778, // 16:9 aspect ratio for better barcode scanning
           disableFlip: false, // Allow rotation for better scanning
+          // Simplified video constraints for better mobile compatibility
           videoConstraints: {
-            facingMode: { ideal: 'environment' },
-            // More flexible constraints for mobile devices
-            width: { min: 320, ideal: 1280, max: 1920 },
-            height: { min: 240, ideal: 720, max: 1080 }
+            facingMode: 'environment', // Use back camera
           },
           // html5-qrcode supports both QR codes and barcodes by default
           // No need to specify formats - it will detect automatically
@@ -151,7 +162,7 @@ export function useBarcodeScanner() {
     error,
     startScanning,
     stopScanning,
-    containerId,
+    containerId: containerId.current,
   };
 }
 
