@@ -38,10 +38,16 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
       }
     };
 
-    startScanning(handleScan, handleError);
+    // Small delay to ensure DOM is ready
+    const timer = setTimeout(() => {
+      if (isMounted) {
+        startScanning(handleScan, handleError);
+      }
+    }, 200);
 
     return () => {
       isMounted = false;
+      clearTimeout(timer);
       stopScanning();
     };
   }, [startScanning, stopScanning]);
@@ -69,8 +75,17 @@ export function BarcodeScanner({ onScan, onClose }: BarcodeScannerProps) {
         </button>
       </div>
       
-      <div className="flex-1 relative overflow-hidden barcode-scanner-parent">
-        <div id={containerId} className="w-full h-full" />
+      <div className="flex-1 relative overflow-hidden barcode-scanner-parent" style={{ minHeight: '400px', backgroundColor: '#000' }}>
+        <div id={containerId} className="w-full h-full" style={{ width: '100%', height: '100%', minHeight: '400px', backgroundColor: '#000' }} />
+        
+        {!displayError && !isScanning && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-90 z-20">
+            <div className="text-white text-center">
+              <p className="text-lg font-semibold mb-2">Initializing camera...</p>
+              <p className="text-sm text-gray-300">Please wait</p>
+            </div>
+          </div>
+        )}
         
         {displayError && (
           <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-90 z-20">

@@ -13,7 +13,7 @@ export function useBarcodeScanner() {
   ) => {
     try {
       setError(null);
-      setIsScanning(true);
+      setIsScanning(false); // Start as false, will be true when camera starts
 
       // Clear any existing scanner
       if (scannerRef.current) {
@@ -25,21 +25,24 @@ export function useBarcodeScanner() {
         }
       }
 
-      // Wait a bit for the DOM to be ready
-      await new Promise(resolve => setTimeout(resolve, 100));
-      
-      // Find or create container element
+      // Wait for DOM to be ready and find the container
       let container = document.getElementById(containerId.current);
+      let attempts = 0;
+      const maxAttempts = 20;
+      
+      while (!container && attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        container = document.getElementById(containerId.current);
+        attempts++;
+      }
+      
       if (!container) {
         const parent = document.querySelector('.barcode-scanner-parent');
         if (!parent) {
-          throw new Error('Scanner container parent not found');
+          throw new Error('Scanner container parent not found. Please refresh the page.');
         }
         container = document.createElement('div');
         container.id = containerId.current;
-        container.className = 'w-full h-full';
-        container.style.width = '100%';
-        container.style.height = '100%';
         parent.appendChild(container);
       }
 
@@ -48,6 +51,18 @@ export function useBarcodeScanner() {
         container.style.display = 'block';
         container.style.width = '100%';
         container.style.height = '100%';
+        container.style.minHeight = '300px';
+        container.style.position = 'relative';
+        container.style.backgroundColor = '#000';
+      }
+
+      // Small delay to ensure container is fully rendered
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Verify container still exists
+      const finalContainer = document.getElementById(containerId.current);
+      if (!finalContainer) {
+        throw new Error('Scanner container not found after initialization. Please try again.');
       }
 
       const scanner = new Html5Qrcode(containerId.current);
@@ -85,7 +100,9 @@ export function useBarcodeScanner() {
           disableFlip: false, // Allow rotation for better scanning
           // Simplified video constraints for better mobile compatibility
           videoConstraints: {
-            facingMode: 'environment', // Use back camera
+            facingMode: { ideal: 'environment' }, // Use back camera
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
           },
           // html5-qrcode supports both QR codes and barcodes by default
           // No need to specify formats - it will detect automatically
@@ -104,6 +121,9 @@ export function useBarcodeScanner() {
           }
         }
       );
+      
+      // Camera started successfully
+      setIsScanning(true);
     } catch (err: any) {
       console.error('Scanner error:', err);
       let errorMessage = 'Failed to start camera';
