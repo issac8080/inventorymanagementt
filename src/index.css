@@ -1,0 +1,59 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body {
+    @apply bg-gray-50 text-gray-900;
+    font-size: 18px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  body {
+    overflow-y: auto;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+
+  h1 {
+    @apply text-3xl font-bold mb-4;
+  }
+
+  h2 {
+    @apply text-2xl font-bold mb-3;
+  }
+
+  h3 {
+    @apply text-xl font-semibold mb-2;
+  }
+}
+
+@layer utilities {
+  .text-large {
+    font-size: 20px;
+  }
+  
+  .text-xlarge {
+    font-size: 24px;
+  }
+}
+
+/* High contrast focus styles for accessibility */
+*:focus-visible {
+  @apply outline-2 outline-offset-2 outline-blue-600;
+}
+
+/* Ensure touch targets are large enough */
+button, a {
+  min-height: 56px;
+  min-width: 56px;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
