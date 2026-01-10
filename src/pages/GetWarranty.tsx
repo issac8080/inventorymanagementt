@@ -103,7 +103,11 @@ export default function GetWarranty() {
       switch (currentMethod) {
         case 'itemCode':
         case 'qr':
-          foundProduct = await productDb.getByItemCode(searchTerm.toUpperCase());
+          // Try both uppercase and original case
+          foundProduct = await productDb.getByItemCode(searchTerm.trim());
+          if (!foundProduct && searchTerm.trim() !== searchTerm.trim().toUpperCase()) {
+            foundProduct = await productDb.getByItemCode(searchTerm.trim().toUpperCase());
+          }
           break;
         case 'barcode':
           const allProducts = await productDb.getAll();
@@ -224,10 +228,26 @@ export default function GetWarranty() {
         playBeep('error');
         toast.error('Product not found. Please check your search term.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Search error:', error);
       playBeep('error');
-      toast.error('Failed to search product');
+      
+      // Provide more specific error messages
+      let errorMessage = 'Failed to search product';
+      if (error?.message) {
+        if (error.message.includes('not authenticated') || error.message.includes('User not authenticated')) {
+          errorMessage = 'Please login to search for products';
+        } else if (error.message.includes('Database not configured')) {
+          errorMessage = 'Database connection error. Please check your connection.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      toast.error(errorMessage);
+      setProduct(null);
+      setWarrantyDoc(null);
+      setWarrantyImageUrl(null);
     } finally {
       setLoading(false);
     }

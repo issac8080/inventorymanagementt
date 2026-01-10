@@ -62,17 +62,39 @@ export const supabaseDb = {
     const user = simpleAuth.getCurrentUser();
     if (!user) throw new Error('User not authenticated');
 
-    const { data, error } = await supabase
+    // Try exact match first (case-sensitive)
+    let { data, error } = await supabase
       .from('products')
       .select('*')
-      .eq('item_code', itemCode)
+      .eq('item_code', itemCode.trim())
       .eq('user_mobile', user.mobile) // Ensure user owns this product
-      .single();
+      .maybeSingle();
+
+    // If not found, try case-insensitive search
+    if (error || !data) {
+      const { data: caseInsensitiveData, error: caseError } = await supabase
+        .from('products')
+        .select('*')
+        .eq('user_mobile', user.mobile)
+        .ilike('item_code', itemCode.trim())
+        .maybeSingle();
+      
+      if (caseError && caseError.code !== 'PGRST116') {
+        throw caseError;
+      }
+      
+      if (caseInsensitiveData) {
+        data = caseInsensitiveData;
+        error = null;
+      }
+    }
 
     if (error) {
       if (error.code === 'PGRST116') return undefined; // Not found
       throw error;
     }
+    
+    if (!data) return undefined;
 
     return {
       id: data.id,
@@ -214,39 +236,92 @@ export const supabaseDb = {
   // Warranty Documents
   async getByProductId(productId: string): Promise<WarrantyDocument | undefined> {
     const user = simpleAuth.getCurrentUser();
-    if (!user) throw new Error('User not authenticated');
-
-    const { data, error } = await supabase
-      .from('warranty_documents')
-      .select('*')
-      .eq('product_id', productId)
-      .eq('user_mobile', user.mobile) // Ensure user owns this warranty
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') return undefined; // Not found
-      throw error;
-    }
-    
-    // Convert base64 data URL back to Blob
-    let blob: Blob;
-    if (data.image_data.startsWith('data:')) {
-      // Already a data URL
-      const response = await fetch(data.image_data);
-      blob = await response.blob();
-    } else {
-      // Assume it's base64, convert to blob
-      const base64Response = await fetch(`data:image/png;base64,${data.image_data}`);
-      blob = await base64Response.blob();
+    if (!user) {
+      console.error('User not authenticated when trying to get warranty document');
+      return undefined; // Return undefined instead of throwing for better UX
     }
 
-    return {
-      id: data.id,
-      productId: data.product_id,
-      imageBlob: blob,
-      extractedText: data.extracted_text,
-      createdAt: new Date(data.created_at),
-    };
+    try {
+      const { data, error } = await supabase
+        .from('warranty_documents')
+        .select('*')
+        .eq('product_id', productId)
+        .eq('user_mobile', user.mobile) // Ensure user owns this warranty
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          // Not found - this is normal, return undefined
+          return undefined;
+        }
+        console.error('Supabase error getting warranty document:', error);
+        throw error;
+      }
+
+      if (!data || !data.image_data) {
+        console.warn('Warranty document found but has no image data');
+        return undefined;
+      }
+      
+      // Convert base64 data URL back to Blob
+      let blob: Blob;
+      try {
+        if (typeof data.image_data !== 'string') {
+          console.error('Image data is not a string:', typeof data.image_data);
+          throw new Error('Invalid image data format');
+        }
+
+        if (data.image_data.startsWith('data:')) {
+          // Already a data URL - extract base64 part and convert
+          const base64Match = data.image_data.match(/^data:image\/\w+;base64,(.+)$/);
+          if (base64Match && base64Match[1]) {
+            // Convert base64 string to binary
+            const binaryString = atob(base64Match[1]);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            // Determine MIME type from data URL
+            const mimeMatch = data.image_data.match(/^data:(image\/\w+);base64,/);
+            const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
+            blob = new Blob([bytes], { type: mimeType });
+          } else {
+            // Fallback: try fetch (may fail for large images)
+            const response = await fetch(data.image_data);
+            blob = await response.blob();
+          }
+        } else {
+          // Assume it's raw base64, convert to blob
+          try {
+            const binaryString = atob(data.image_data);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+              bytes[i] = binaryString.charCodeAt(i);
+            }
+            blob = new Blob([bytes], { type: 'image/png' });
+          } catch (base64Error) {
+            // Fallback: try with data URL prefix
+            const base64Response = await fetch(`data:image/png;base64,${data.image_data}`);
+            blob = await base64Response.blob();
+          }
+        }
+      } catch (blobError) {
+        console.error('Error converting warranty image data to blob:', blobError);
+        throw new Error('Failed to process warranty image data');
+      }
+
+      return {
+        id: data.id,
+        productId: data.product_id,
+        imageBlob: blob,
+        extractedText: data.extracted_text,
+        createdAt: new Date(data.created_at),
+      };
+    } catch (err: any) {
+      console.error('Error in getByProductId:', err);
+      // Return undefined instead of throwing to allow the page to still show product info
+      return undefined;
+    }
   },
 
   async add(document: WarrantyDocument): Promise<string> {
