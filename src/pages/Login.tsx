@@ -9,7 +9,6 @@ export default function Login() {
   const navigate = useNavigate();
   const [mobile, setMobile] = useState('');
   const [password, setPassword] = useState('');
-  const [username, setUsername] = useState('');
   const [isSignup, setIsSignup] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -52,7 +51,7 @@ export default function Login() {
     }
 
     setLoading(true);
-    const { error, user } = await simpleAuth.signup(mobile, password, username || undefined);
+    const { error, user } = await simpleAuth.signup(mobile, password);
     setLoading(false);
 
     if (!error && user) {
@@ -86,27 +85,6 @@ export default function Login() {
         </div>
 
         <div className="space-y-4">
-          {isSignup && (
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Username (Optional)
-              </label>
-              <input
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                onKeyPress={(e) => {
-                  if (e.key === 'Enter' && !loading && mobile && password.length >= 4) {
-                    handleSignup();
-                  }
-                }}
-                placeholder="Choose a username"
-                className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none text-lg"
-                autoFocus={isSignup}
-              />
-            </div>
-          )}
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Mobile Number
@@ -115,12 +93,14 @@ export default function Login() {
               type="text"
               value={mobile}
               onChange={(e) => {
-                // Allow admin username "issac" or numeric mobile numbers
+                // Allow admin username "issac" (including partial typing) or numeric mobile numbers
                 const value = e.target.value;
-                if (value.toLowerCase().startsWith('issac') || /^\d*$/.test(value)) {
+                const lowerValue = value.toLowerCase();
+                const isIssacPrefix = lowerValue.length <= 5 && 'issac'.startsWith(lowerValue);
+                const isNumeric = /^\d*$/.test(value);
+                
+                if (isIssacPrefix || isNumeric || value.length === 0) {
                   setMobile(value);
-                } else if (value.length === 0) {
-                  setMobile('');
                 }
               }}
               onKeyPress={(e) => {
@@ -131,7 +111,7 @@ export default function Login() {
               }}
               placeholder={isSignup ? "Enter your mobile number" : "Enter mobile number or admin username"}
               className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:border-blue-500 focus:outline-none text-lg"
-              autoFocus={!isSignup}
+              autoFocus
               maxLength={15}
             />
           </div>
@@ -176,7 +156,6 @@ export default function Login() {
                 setIsSignup(!isSignup);
                 setMobile('');
                 setPassword('');
-                setUsername('');
               }}
               className="text-blue-600 hover:underline text-sm"
             >

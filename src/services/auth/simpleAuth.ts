@@ -167,5 +167,83 @@ export const simpleAuth = {
     localStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('isAdmin', isAdmin.toString());
   },
+
+  // Create user (admin only)
+  async createUser(mobile: string, password: string, username?: string): Promise<{ error: Error | null; user: User | null }> {
+    try {
+      // Check if user is admin before creating
+      if (!this.isCurrentUserAdmin()) {
+        throw new Error('Unauthorized: Admin access required');
+      }
+
+      if (!mobile || mobile.trim().length < 10) {
+        throw new Error('Please enter a valid mobile number (at least 10 digits)');
+      }
+
+      if (!password || password.length < 4) {
+        throw new Error('Password must be at least 4 characters');
+      }
+
+      // Check if mobile already exists
+      const { data: existing } = await supabase
+        .from('app_users')
+        .select('*')
+        .eq('mobile', mobile.trim())
+        .single();
+
+      if (existing) {
+        throw new Error('Mobile number already registered');
+      }
+
+      // Create new user
+      const { data, error } = await supabase
+        .from('app_users')
+        .insert({
+          mobile: mobile.trim(),
+          password: password, // Plaintext storage as requested
+          username: username || mobile.trim(),
+          created_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast.success('User created successfully!');
+      return { error: null, user: data };
+    } catch (error: any) {
+      console.error('Create user error:', error);
+      toast.error(error.message || 'Failed to create user. Please try again.');
+      return { error: error as Error, user: null };
+    }
+  },
+
+  // Delete user (admin only)
+  async deleteUser(userId: string): Promise<{ error: Error | null; success: boolean }> {
+    try {
+      // Check if user is admin before deleting
+      if (!this.isCurrentUserAdmin()) {
+        throw new Error('Unauthorized: Admin access required');
+      }
+
+      if (!userId) {
+        throw new Error('User ID is required');
+      }
+
+      const { error } = await supabase
+        .from('app_users')
+        .delete()
+        .eq('id', userId);
+
+      if (error) throw error;
+
+      toast.success('User deleted successfully!');
+      return { error: null, success: true };
+    } catch (error: any) {
+      console.error('Delete user error:', error);
+      toast.error(error.message || 'Failed to delete user. Please try again.');
+      return { error: error as Error, success: false };
+    }
+  },
 };
 
