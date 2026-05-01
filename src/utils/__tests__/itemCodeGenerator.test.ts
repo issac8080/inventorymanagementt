@@ -1,12 +1,21 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { generateItemCode, getCategoryCode } from '../itemCodeGenerator';
-import { productDb } from '@/services/database/localDb';
+import { productDb } from '@/services/database/db';
 
-// Mock the database
-vi.mock('@/services/database/localDb', () => ({
+vi.mock('@/services/database/db', () => ({
   productDb: {
     getByCategory: vi.fn(),
+    getAll: vi.fn(),
+    getById: vi.fn(),
+    add: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    search: vi.fn(),
+    getByItemCode: vi.fn(),
   },
+  warrantyDb: {},
+  isUsingLocalDatabase: () => true,
+  isUsingFirebase: () => false,
 }));
 
 describe('ItemCodeGenerator', () => {

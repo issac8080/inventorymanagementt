@@ -21,10 +21,12 @@ const Admin = lazy(() => import('./pages/Admin').then(m => ({ default: m.default
 function AppContent() {
   const location = useLocation();
   const [user, setUser] = useState<User | null>(null);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    // Check current user from localStorage
+    const unsubAuth = simpleAuth.initCloudAuthSync(() => {
+      setUser(simpleAuth.getCurrentUser());
+    });
+
     const checkUser = () => {
       const currentUser = simpleAuth.getCurrentUser();
       setUser(currentUser);
@@ -32,14 +34,12 @@ function AppContent() {
 
     checkUser();
 
-    // Listen for login event (dispatched from Login page)
     const handleLogin = () => {
       checkUser();
     };
 
     window.addEventListener('userLogin', handleLogin);
-    
-    // Also check on storage changes (in case user logged in another tab)
+
     const handleStorageChange = () => {
       checkUser();
     };
@@ -47,6 +47,7 @@ function AppContent() {
     window.addEventListener('storage', handleStorageChange);
 
     return () => {
+      unsubAuth();
       window.removeEventListener('userLogin', handleLogin);
       window.removeEventListener('storage', handleStorageChange);
     };
@@ -58,18 +59,10 @@ function AppContent() {
     setUser(currentUser);
   }, [location.pathname]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner />
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 text-gray-900">
       {user && <Navbar />}
-      <Suspense fallback={<LoadingSpinner />}>
+      <Suspense fallback={<LoadingSpinner fullScreen text="Loading page…" />}>
         <Routes>
               <Route
                 path="/login"
@@ -115,13 +108,24 @@ function AppContent() {
       </Suspense>
       <Toaster
         position="top-center"
+        gutter={12}
         toastOptions={{
           duration: 4000,
+          className: '!shadow-lg !rounded-xl !border !border-gray-200',
           style: {
-            background: '#fff',
-            color: '#1f2937',
-            fontSize: '18px',
-            padding: '16px',
+            background: '#ffffff',
+            color: '#111827',
+            fontSize: '17px',
+            padding: '14px 18px',
+            maxWidth: 'min(100vw - 24px, 28rem)',
+          },
+          success: {
+            iconTheme: { primary: '#059669', secondary: '#ecfdf5' },
+            style: { borderColor: '#a7f3d0' },
+          },
+          error: {
+            iconTheme: { primary: '#dc2626', secondary: '#fef2f2' },
+            style: { borderColor: '#fecaca' },
           },
         }}
       />

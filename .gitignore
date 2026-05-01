@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# Env files with secrets (use .env.local for local overrides; keep .env out of git if it holds keys)
+.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

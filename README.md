@@ -2,7 +2,7 @@
 
 **by Issac**
 
-A mobile-first Progressive Web App (PWA) for managing home products and warranty cards, optimized for elderly users (50-60 age group) with offline-first architecture.
+A mobile-first Progressive Web App (PWA) for managing home products and warranty cards, optimized for elderly users (50-60 age group). Works **fully on-device** (IndexedDB) without Firebase env vars, or **cloud + login** when **Firebase Firestore** (`VITE_FIREBASE_*`) is configured.
 
 ## 🎯 Features
 
@@ -10,7 +10,7 @@ A mobile-first Progressive Web App (PWA) for managing home products and warranty
 - **📷 Barcode Scanning**: Scan product barcodes to automatically fetch product details from multiple APIs
 - **📱 QR Code Generation**: Auto-generate QR codes for easy product identification
 - **🛡️ Warranty Management**: Store warranty card images with optional OCR text extraction
-- **💾 Offline-First**: All data stored locally in IndexedDB - works completely offline
+- **💾 On-device or cloud**: IndexedDB (Dexie) when Firebase is not configured; **Firestore** when `VITE_FIREBASE_*` is set — use **Continue on this device only** on the login screen for local-only use
 - **🔍 Inventory Audit**: Scan QR codes to verify product presence
 - **📄 PDF Generation**: Print QR codes as stickers or A4 sheets, generate warranty PDFs
 - **📊 Bulk Import**: Import products via Excel or manual table entry with warranty information
@@ -35,8 +35,9 @@ A mobile-first Progressive Web App (PWA) for managing home products and warranty
 
 ### State & Data
 - **Zustand** - Lightweight state management
-- **IndexedDB** (via **Dexie.js**) - Local offline database
-- **Database Migrations** - Version-controlled schema updates
+- **IndexedDB** (via **Dexie.js**) - Local database when Firebase is not configured
+- **Firebase** (Firestore) - Cloud login, users (`app_users`), products, and warranty documents when `VITE_FIREBASE_*` is set (`src/services/database/db.ts` → `firestoreDb.ts`)
+- **Dexie schema versions** - Local DB migrations in `localDb.ts`
 
 ### Core Libraries
 - **html5-qrcode** - QR/Barcode scanning
@@ -71,17 +72,22 @@ A mobile-first Progressive Web App (PWA) for managing home products and warranty
    npm install
    ```
 
-3. **Start development server**
+3. **Optional — Firebase (multi-device)**  
+   Fill `VITE_FIREBASE_*` from the Firebase console (see `.env.example`). Create a Firestore database (Native mode), deploy rules from `firestore.rules` (tighten for production). Collections `app_users`, `products`, and `warranty_documents` are created when you use the app.
+
+   If Firebase is **not** configured, the app uses **IndexedDB only** after you tap **Continue on this device only** on the login screen.
+
+4. **Start development server**
    ```bash
    npm run dev
    ```
 
-4. **Build for production**
+5. **Build for production**
    ```bash
    npm run build
    ```
 
-5. **Preview production build**
+6. **Preview production build**
    ```bash
    npm run preview
    ```
@@ -158,7 +164,7 @@ src/
 ### QR Code System
 - QR codes contain only itemCode
 - Scan QR to instantly view product details
-- Works completely offline
+- On-device mode works without internet after first load; cloud mode needs connectivity to sync
 - Generate printable PDFs
 
 ### Bulk Import
@@ -177,9 +183,16 @@ src/
 
 1. **Elder-Friendly**: Large fonts, high contrast, minimal typing
 2. **Mobile-First**: Responsive design, touch-friendly
-3. **Offline-First**: Core functionality works without internet
+3. **Resilient**: Local IndexedDB path works without a backend; cloud path adds multi-device access
 4. **Error-Proof**: Comprehensive error handling and validation
 5. **Accessible**: WCAG 2.1 compliant
+
+## 🚀 Public release checklist
+
+- Set **Firebase** env vars (see `.env.example`), or ship as **device-only** with no cloud keys.
+- **Admin**: leave `VITE_ADMIN_USERNAME` / `VITE_ADMIN_PASSWORD` unset unless you need the `/admin` screen; never commit real passwords.
+- **Firestore**: replace open rules in `firestore.rules` with Firebase Auth–scoped rules before production traffic.
+- Run `npm run build` and smoke-test login, add product, warranty upload, export from Settings.
 
 ## 🔒 Security Features
 
@@ -187,7 +200,7 @@ src/
 - File type and size validation
 - Content Security Policy (CSP)
 - Secure IndexedDB storage
-- No external data transmission (except product lookup APIs)
+- With Firebase: product and warranty data sync to Firestore (see `SETUP.md`). Without Firebase: data stays in the browser. Barcode lookup still uses external APIs when online.
 
 ## 📱 PWA Features
 

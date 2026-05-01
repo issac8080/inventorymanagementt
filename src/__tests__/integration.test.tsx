@@ -1,15 +1,33 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import { productDb, warrantyDb } from '@/services/database/localDb';
+import { productDb, warrantyDb } from '@/services/database/db';
 import { Product, WarrantyDocument } from '@/types';
 import { generateUUID } from '@/utils/uuid';
 import { useProductStore } from '@/stores/productStore';
-import Home from '@/pages/Home';
 import GetWarranty from '@/pages/GetWarranty';
 
 // Mock dependencies
-vi.mock('@/services/database/localDb');
+vi.mock('@/services/database/db', () => ({
+  productDb: {
+    getAll: vi.fn(),
+    add: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    search: vi.fn(),
+    getByItemCode: vi.fn(),
+    getByCategory: vi.fn(),
+    getById: vi.fn(),
+  },
+  warrantyDb: {
+    getByProductId: vi.fn(),
+    add: vi.fn(),
+    delete: vi.fn(),
+    deleteByProductId: vi.fn(),
+  },
+  isUsingLocalDatabase: vi.fn(() => true),
+  isUsingFirebase: vi.fn(() => false),
+}));
 vi.mock('@/utils/sounds', () => ({ playBeep: vi.fn() }));
 vi.mock('react-hot-toast', () => ({ default: { success: vi.fn(), error: vi.fn() } }));
 vi.mock('@/hooks/usePWA', () => ({ usePWA: () => ({ isInstallable: false, install: vi.fn() }) }));
@@ -80,7 +98,7 @@ describe('Integration Tests - Frontend ↔ Database', () => {
       );
       
       const input = screen.getByPlaceholderText(/Enter item code/i);
-      const searchButton = screen.getByText(/Search Product/i);
+      const searchButton = screen.getByRole('button', { name: /Search Product/i });
       
       fireEvent.change(input, { target: { value: 'TV-001' } });
       fireEvent.click(searchButton);
@@ -105,7 +123,7 @@ describe('Integration Tests - Frontend ↔ Database', () => {
       );
       
       const input = screen.getByPlaceholderText(/Enter item code/i);
-      const searchButton = screen.getByText(/Search Product/i);
+      const searchButton = screen.getByRole('button', { name: /Search Product/i });
       
       fireEvent.change(input, { target: { value: 'TV-001' } });
       fireEvent.click(searchButton);
@@ -130,9 +148,21 @@ describe('Integration Tests - Frontend ↔ Database', () => {
 });
 
 describe('Integration Tests - API ↔ Database', () => {
+  const sampleProduct: Product = {
+    id: generateUUID(),
+    itemCode: 'TV-001',
+    name: 'Test TV',
+    category: 'TV',
+    qrValue: 'TV-001',
+    barcode: '1234567890123',
+    warrantyStart: new Date('2024-01-01'),
+    warrantyEnd: new Date('2025-01-01'),
+    createdAt: new Date(),
+  };
+
   describe('Product Lookup Integration', () => {
     it('should handle product lookup with barcode', async () => {
-      const allProducts = [testProduct];
+      const allProducts = [sampleProduct];
       vi.mocked(productDb.getAll).mockResolvedValue(allProducts);
       
       const found = allProducts.find(p => p.barcode === '1234567890123');
@@ -144,8 +174,8 @@ describe('Integration Tests - API ↔ Database', () => {
   describe('Search Integration', () => {
     it('should search across multiple fields', async () => {
       const products = [
-        testProduct,
-        { ...testProduct, id: generateUUID(), itemCode: 'FRIDGE-001', name: 'Test Fridge', category: 'Refrigerator' },
+        sampleProduct,
+        { ...sampleProduct, id: generateUUID(), itemCode: 'FRIDGE-001', name: 'Test Fridge', category: 'Refrigerator' },
       ];
       
       vi.mocked(productDb.search).mockResolvedValue(products);

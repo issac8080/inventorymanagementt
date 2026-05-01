@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MessageCircle, X, Send, Mic, MicOff, ExternalLink, Plus } from 'lucide-react';
+import { MessageCircle, X, Send, Mic, MicOff, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/common/Button';
 import { useVoiceInput } from '@/hooks/useVoiceInput';
 import { productDb } from '@/services/database/db';
@@ -28,7 +28,7 @@ interface ChatMessage {
   product?: Product;
 }
 
-export function Chatbot({ onProductSelect }: ChatbotProps) {
+export function Chatbot({ onProductSelect: _onProductSelect }: ChatbotProps) {
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -572,7 +572,15 @@ export function Chatbot({ onProductSelect }: ChatbotProps) {
                 handleSend();
               }
             }}
-            placeholder={addingProduct ? (currentAddStep === 0 ? 'Enter product name' : currentAddStep === 1 ? 'Enter category' : 'Enter barcode or "no"') : "Ask me anything..."}
+            placeholder={
+              addingProduct
+                ? !productData.name
+                  ? 'Enter product name'
+                  : !productData.category
+                    ? 'Enter category'
+                    : 'Enter barcode or "no"'
+                : 'Ask me anything...'
+            }
             className="flex-1 px-3 sm:px-4 py-2 sm:py-3 text-base sm:text-lg border-2 border-gray-300 rounded-lg focus:border-blue-600 focus:outline-none"
             disabled={isProcessing}
             autoFocus

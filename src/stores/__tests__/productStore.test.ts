@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useProductStore } from '../productStore';
-import { productDb } from '@/services/database/localDb';
+import { productDb } from '@/services/database/db';
 import { Product } from '@/types';
 import { generateUUID } from '@/utils/uuid';
 
 // Mock database
-vi.mock('@/services/database/localDb', () => ({
+vi.mock('@/services/database/db', () => ({
   productDb: {
     getAll: vi.fn(),
     add: vi.fn(),
@@ -14,7 +14,11 @@ vi.mock('@/services/database/localDb', () => ({
     search: vi.fn(),
     getByItemCode: vi.fn(),
     getByCategory: vi.fn(),
+    getById: vi.fn(),
   },
+  warrantyDb: {},
+  isUsingLocalDatabase: () => true,
+  isUsingFirebase: () => false,
 }));
 
 describe('ProductStore - Unit & Integration Tests', () => {

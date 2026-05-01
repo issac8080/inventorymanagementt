@@ -1,14 +1,31 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
-import React from 'react';
 import GetWarranty from '../GetWarranty';
-import { productDb, warrantyDb } from '@/services/database/localDb';
+import { productDb, warrantyDb } from '@/services/database/db';
 import { Product, WarrantyDocument } from '@/types';
 import { generateUUID } from '@/utils/uuid';
 
-// Mock database
-vi.mock('@/services/database/localDb');
+vi.mock('@/services/database/db', () => ({
+  productDb: {
+    getAll: vi.fn(),
+    getById: vi.fn(),
+    add: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    search: vi.fn(),
+    getByItemCode: vi.fn(),
+    getByCategory: vi.fn(),
+  },
+  warrantyDb: {
+    getByProductId: vi.fn(),
+    add: vi.fn(),
+    delete: vi.fn(),
+    deleteByProductId: vi.fn(),
+  },
+  isUsingLocalDatabase: () => true,
+  isUsingFirebase: () => false,
+}));
 vi.mock('@/utils/sounds', () => ({
   playBeep: vi.fn(),
 }));
@@ -18,22 +35,8 @@ vi.mock('react-hot-toast', () => ({
     error: vi.fn(),
   },
 }));
-vi.mock('jspdf', () => ({
-  default: vi.fn().mockImplementation(() => ({
-    setFillColor: vi.fn(),
-    rect: vi.fn(),
-    setTextColor: vi.fn(),
-    setFontSize: vi.fn(),
-    setFont: vi.fn(),
-    text: vi.fn(),
-    setDrawColor: vi.fn(),
-    setLineWidth: vi.fn(),
-    line: vi.fn(),
-    splitTextToSize: vi.fn((text) => [text]),
-    addPage: vi.fn(),
-    addImage: vi.fn(),
-    save: vi.fn(),
-  })),
+vi.mock('@/services/pdf/warrantyPdf', () => ({
+  generateWarrantyCertificatePdf: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe('GetWarranty - Page Functional Tests', () => {

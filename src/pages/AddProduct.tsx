@@ -28,6 +28,10 @@ export default function AddProduct() {
     name: '',
     category: '',
     barcode: '',
+    location: '',
+    notes: '',
+    currency: undefined,
+    purchasePrice: undefined,
   });
 
   const handleBarcodeLookup = async (barcode: string) => {
@@ -97,7 +101,14 @@ export default function AddProduct() {
 
   const handleSave = useCallback(async () => {
     // Validate product data
-    const validation = validateProduct(product);
+    const validation = validateProduct({
+      ...product,
+      purchasePrice:
+        product.purchasePrice == null || Number.isNaN(Number(product.purchasePrice))
+          ? undefined
+          : Number(product.purchasePrice),
+      currency: product.currency?.trim() ? product.currency.trim() : undefined,
+    });
     if (!validation.success) {
       const errors = validation.errors?.errors.map(e => e.message).join(', ') || 'Invalid product data';
       toast.error(errors);
@@ -123,6 +134,10 @@ export default function AddProduct() {
         name: validation.data.name,
         category: validation.data.category,
         barcode: validation.data.barcode,
+        location: validation.data.location?.trim() || undefined,
+        notes: validation.data.notes?.trim() || undefined,
+        purchasePrice: validation.data.purchasePrice,
+        currency: validation.data.currency,
         qrValue,
         warrantyStart: validation.data.warrantyStart,
         warrantyEnd: validation.data.warrantyEnd,
@@ -164,7 +179,14 @@ export default function AddProduct() {
           name: product.name,
           category: product.category,
           barcode: product.barcode,
-          qrValue: itemCode,
+          location: product.location?.trim() || undefined,
+          notes: product.notes?.trim() || undefined,
+          purchasePrice:
+            product.purchasePrice == null || Number.isNaN(Number(product.purchasePrice))
+              ? undefined
+              : Number(product.purchasePrice),
+          currency: product.currency?.trim() ? product.currency.trim().toUpperCase() : undefined,
+          qrValue: generateQRCodeUrl(itemCode),
           warrantyStart,
           warrantyEnd,
           warrantyDuration: warrantyStart && warrantyEnd 
@@ -362,6 +384,73 @@ export default function AddProduct() {
                 <option value="Iron">🔧 Iron</option>
                 <option value="Other">📦 Other</option>
               </select>
+            </div>
+
+            <div>
+              <label className="block text-base sm:text-lg font-semibold mb-2 text-gray-700">
+                Room / location (optional)
+              </label>
+              <input
+                type="text"
+                value={product.location ?? ''}
+                onChange={(e) => setProduct({ ...product, location: e.target.value })}
+                className="w-full px-3 sm:px-4 py-3 sm:py-4 text-lg sm:text-xl border-2 border-gray-300 rounded-lg focus:border-green-600 focus:outline-none"
+                placeholder="e.g., Kitchen, Garage"
+                autoComplete="off"
+              />
+            </div>
+
+            <div>
+              <label className="block text-base sm:text-lg font-semibold mb-2 text-gray-700">
+                Notes (optional)
+              </label>
+              <textarea
+                value={product.notes ?? ''}
+                onChange={(e) => setProduct({ ...product, notes: e.target.value })}
+                className="w-full px-3 sm:px-4 py-3 sm:py-4 text-lg sm:text-xl border-2 border-gray-300 rounded-lg focus:border-green-600 focus:outline-none min-h-[100px]"
+                placeholder="Serial number, store, or other reminders"
+                rows={3}
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-base sm:text-lg font-semibold mb-2 text-gray-700">
+                  Purchase price (optional)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={product.purchasePrice ?? ''}
+                  onChange={(e) =>
+                    setProduct({
+                      ...product,
+                      purchasePrice: e.target.value === '' ? undefined : Number(e.target.value),
+                    })
+                  }
+                  className="w-full px-3 sm:px-4 py-3 sm:py-4 text-lg sm:text-xl border-2 border-gray-300 rounded-lg focus:border-green-600 focus:outline-none"
+                  placeholder="e.g. 45999"
+                  autoComplete="off"
+                />
+              </div>
+              <div>
+                <label className="block text-base sm:text-lg font-semibold mb-2 text-gray-700">
+                  Currency (optional)
+                </label>
+                <input
+                  type="text"
+                  maxLength={3}
+                  value={product.currency ?? ''}
+                  onChange={(e) => {
+                    const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+                    setProduct({ ...product, currency: v || undefined });
+                  }}
+                  className="w-full px-3 sm:px-4 py-3 sm:py-4 text-lg sm:text-xl border-2 border-gray-300 rounded-lg focus:border-green-600 focus:outline-none uppercase"
+                  placeholder="INR"
+                  autoComplete="off"
+                />
+              </div>
             </div>
           </div>
         </Card>

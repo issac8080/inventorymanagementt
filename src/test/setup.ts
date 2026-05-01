@@ -1,13 +1,18 @@
-import { expect, afterEach } from 'vitest';
-import { cleanup } from '@testing-library/react';
+import 'fake-indexeddb/auto';
+import { afterEach } from 'vitest';
+import { cleanup, configure } from '@testing-library/react';
 import '@testing-library/jest-dom';
 
-// Mock IndexedDB - must be set up before any Dexie imports
-global.indexedDB = require('fake-indexeddb');
-global.IDBKeyRange = require('fake-indexeddb/lib/FDBKeyRange');
+// Lazy routes + Suspense need longer than the default 1000ms for findBy/waitFor.
+configure({ asyncUtilTimeout: 15000 });
 
-// Cleanup after each test
+let blobUrlSeq = 0;
+const UrlGlobal = globalThis.URL;
+if (UrlGlobal && typeof UrlGlobal.createObjectURL !== 'function') {
+  UrlGlobal.createObjectURL = () => `blob:http://localhost/mock-${++blobUrlSeq}`;
+  UrlGlobal.revokeObjectURL = () => {};
+}
+
 afterEach(() => {
   cleanup();
 });
-

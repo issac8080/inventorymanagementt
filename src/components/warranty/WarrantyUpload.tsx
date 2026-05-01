@@ -6,7 +6,6 @@ import { extractTextFromImage } from '@/services/ocr/tesseractService';
 import { parseWarrantyDate, parseWarrantyDuration, calculateWarrantyEnd } from '@/utils/warrantyCalculator';
 import { validateFile } from '@/utils/validation';
 import { handleError } from '@/utils/errorHandler';
-import { generateUUID } from '@/utils/uuid';
 import toast from 'react-hot-toast';
 
 interface WarrantyUploadProps {
@@ -109,7 +108,7 @@ export function WarrantyUpload({ onSave, onClose }: WarrantyUploadProps) {
     if (warrantyDuration && startDate) {
       const duration = parseInt(warrantyDuration, 10);
       endDate = calculateWarrantyEnd(startDate, duration);
-    } else if (warrantyStart && !warrantyDuration) {
+    } else if (warrantyStart && !warrantyDuration && startDate) {
       // If only start date is provided, assume 1 year warranty
       endDate = calculateWarrantyEnd(startDate, 12);
     }

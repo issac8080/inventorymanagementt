@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { addDays } from 'date-fns';
 import { Plus, Search, QrCode, FileSpreadsheet, Package } from 'lucide-react';
 import { useDebouncedCallback } from 'use-debounce';
 import { Button } from '@/components/common/Button';
@@ -14,6 +15,40 @@ import { Chatbot } from '@/components/assistant/Chatbot';
 import { BulkImport } from '@/components/bulk/BulkImport';
 import { playBeep } from '@/utils/sounds';
 
+type WarrantyFilterTab = 'all' | 'expiring30' | 'expired' | 'noWarranty';
+
+function InventoryGridSkeleton() {
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4" aria-hidden>
+      {Array.from({ length: 6 }).map((_, i) => (
+        <Card key={i} className="animate-pulse motion-reduce:animate-none">
+          <div className="h-6 bg-gray-200 rounded w-3/4 mb-3" />
+          <div className="h-4 bg-gray-100 rounded w-1/2 mb-2" />
+          <div className="h-4 bg-gray-100 rounded w-full" />
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function matchesWarrantyFilter(product: Product, tab: WarrantyFilterTab): boolean {
+  const end = product.warrantyEnd;
+  const now = new Date();
+  const thirtyDaysOut = addDays(now, 30);
+  switch (tab) {
+    case 'all':
+      return true;
+    case 'noWarranty':
+      return !end;
+    case 'expired':
+      return !!end && end < now;
+    case 'expiring30':
+      return !!end && end >= now && end <= thirtyDaysOut;
+    default:
+      return true;
+  }
+}
+
 export default function Inventory() {
   const navigate = useNavigate();
   const { products, loading, loadProducts, searchProducts } = useProductStore();
@@ -22,6 +57,7 @@ export default function Inventory() {
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  const [warrantyFilter, setWarrantyFilter] = useState<WarrantyFilterTab>('all');
 
   // Load products on mount
   useEffect(() => {
@@ -63,6 +99,18 @@ export default function Inventory() {
     }
     return searchResults;
   }, [products, searchQuery, searchResults]);
+
+  const displayedProducts = useMemo(
+    () => filteredProducts.filter((p) => matchesWarrantyFilter(p, warrantyFilter)),
+    [filteredProducts, warrantyFilter]
+  );
+
+  const warrantyFilterTabs: { id: WarrantyFilterTab; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'expiring30', label: 'Warranty ≤ 30 days' },
+    { id: 'expired', label: 'Expired' },
+    { id: 'noWarranty', label: 'No warranty date' },
+  ];
 
   const handleSearch = useCallback(() => {
     // Search is handled automatically by debouncedSearch
@@ -130,22 +178,46 @@ export default function Inventory() {
           <QrCode className="w-5 h-5 mr-2" />
           Scan QR Code
         </Button>
+
+        <div className="flex flex-wrap gap-2" role="tablist" aria-label="Filter by warranty">
+          {warrantyFilterTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={warrantyFilter === tab.id}
+              onClick={() => setWarrantyFilter(tab.id)}
+              className={`px-3 py-2 rounded-lg text-sm sm:text-base font-semibold border-2 transition-colors ${
+                warrantyFilter === tab.id
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white text-gray-700 border-gray-300 hover:border-blue-400'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {loading || isSearching ? (
-        <LoadingSpinner
-          text={loading ? 'Loading products...' : 'Searching...'}
-          fullScreen={false}
-        />
-      ) : filteredProducts.length === 0 ? (
+      {loading ? (
+        <InventoryGridSkeleton />
+      ) : isSearching ? (
+        <LoadingSpinner text="Searching..." fullScreen={false} />
+      ) : displayedProducts.length === 0 ? (
         <Card>
           <EmptyState
             icon={<Package className="w-16 h-16" />}
-            title={searchQuery ? 'No products found' : 'No products yet'}
+            title={
+              searchQuery || warrantyFilter !== 'all'
+                ? 'No products match filters'
+                : 'No products yet'
+            }
             description={
               searchQuery
-                ? `No products match "${searchQuery}". Try a different search term.`
-                : 'Start by adding your first product to track warranties and manage your inventory.'
+                ? `No products match "${searchQuery}"${warrantyFilter !== 'all' ? ' and the selected warranty filter' : ''}. Try adjusting filters or search.`
+                : warrantyFilter !== 'all'
+                  ? 'No products in this warranty category. Try another filter or add products with warranty dates.'
+                  : 'Start by adding your first product to track warranties and manage your inventory.'
             }
             action={
               <Link to="/add">
@@ -159,7 +231,7 @@ export default function Inventory() {
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {filteredProducts.map((product) => {
+          {displayedProducts.map((product) => {
             const warrantyStatus = getWarrantyStatus(product.warrantyEnd);
             return (
               <Link key={product.id} to={`/product/${product.itemCode}`}>

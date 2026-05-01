@@ -4,19 +4,18 @@ import { Button } from '@/components/common/Button';
 import { Card } from '@/components/common/Card';
 import { QRScanner } from '@/components/scanner/QRScanner';
 import { productDb, warrantyDb } from '@/services/database/db';
-import { Product, WarrantyDocument } from '@/types';
+import { Product } from '@/types';
 import { getWarrantyStatus } from '@/utils/warrantyCalculator';
 import { formatDate } from '@/utils/dateUtils';
 import { extractItemCodeFromQR } from '@/utils/qrCodeUrl';
 import { playBeep } from '@/utils/sounds';
 import toast from 'react-hot-toast';
-import jsPDF from 'jspdf';
+import { generateWarrantyCertificatePdf } from '@/services/pdf/warrantyPdf';
 
 export default function GetWarranty() {
   const [searchMethod, setSearchMethod] = useState<'itemCode' | 'barcode' | 'name' | 'qr'>('itemCode');
   const [searchInput, setSearchInput] = useState('');
   const [product, setProduct] = useState<Product | null>(null);
-  const [warrantyDoc, setWarrantyDoc] = useState<WarrantyDocument | null>(null);
   const [warrantyImageUrl, setWarrantyImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
@@ -199,7 +198,6 @@ export default function GetWarranty() {
         try {
           const doc = await warrantyDb.getByProductId(foundProduct.id);
           if (doc) {
-            setWarrantyDoc(doc);
             try {
               const imageUrl = URL.createObjectURL(doc.imageBlob);
               setWarrantyImageUrl(imageUrl);
@@ -208,12 +206,10 @@ export default function GetWarranty() {
               setWarrantyImageUrl(null);
             }
           } else {
-            setWarrantyDoc(null);
             setWarrantyImageUrl(null);
           }
         } catch (warrantyError) {
           console.error('Error loading warranty document:', warrantyError);
-          setWarrantyDoc(null);
           setWarrantyImageUrl(null);
           // Don't fail the whole search if warranty loading fails
           toast.error('Product found, but warranty document could not be loaded');
@@ -223,7 +219,6 @@ export default function GetWarranty() {
         toast.success('Product found!');
       } else {
         setProduct(null);
-        setWarrantyDoc(null);
         setWarrantyImageUrl(null);
         playBeep('error');
         toast.error('Product not found. Please check your search term.');
@@ -246,7 +241,6 @@ export default function GetWarranty() {
       
       toast.error(errorMessage);
       setProduct(null);
-      setWarrantyDoc(null);
       setWarrantyImageUrl(null);
     } finally {
       setLoading(false);
@@ -282,217 +276,7 @@ export default function GetWarranty() {
     }
 
     try {
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      // Page 1: Product Details with colorful design
-      // Header with gradient effect (simulated with colored box)
-      pdf.setFillColor(59, 130, 246); // Blue-500
-      pdf.rect(0, 0, 210, 40, 'F');
-      
-      // Title
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(28);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Product Details', 105, 25, { align: 'center' });
-
-      // Product Information Card (simulated with rectangle)
-      const cardY = 55;
-      const cardHeight = 190;
-      
-      // Card background (light blue)
-      pdf.setFillColor(239, 246, 255); // Blue-50
-      pdf.setDrawColor(59, 130, 246); // Blue-500
-      pdf.setLineWidth(2);
-      pdf.rect(15, cardY, 180, cardHeight, 'FD');
-
-      let currentY = cardY + 25; // Increased top padding
-
-      // Item Code - Highlighted
-      pdf.setFontSize(11);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(30, 64, 175); // Blue-800
-      pdf.text('Item Code', 25, currentY);
-      pdf.setFontSize(26);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(0, 0, 0);
-      pdf.text(product.itemCode || '', 25, currentY + 12);
-      currentY += 35; // Increased spacing
-
-      // Divider
-      pdf.setDrawColor(200, 200, 200);
-      pdf.setLineWidth(0.5);
-      pdf.line(25, currentY, 185, currentY);
-      currentY += 18; // Increased spacing after divider
-
-      // Product Name
-      pdf.setFontSize(11);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(30, 64, 175);
-      pdf.text('Product Name', 25, currentY);
-      pdf.setFontSize(20);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(0, 0, 0);
-      const nameLines = pdf.splitTextToSize(product.name || '', 160);
-      pdf.text(nameLines, 25, currentY + 12);
-      currentY += nameLines.length * 9 + 15; // Increased line spacing
-
-      // Category
-      pdf.setFontSize(11);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(30, 64, 175);
-      pdf.text('Category', 25, currentY);
-      pdf.setFontSize(18);
-      pdf.setFont('helvetica', 'normal');
-      pdf.setTextColor(0, 0, 0);
-      pdf.text(product.category || '', 25, currentY + 12);
-      currentY += 25; // Increased spacing
-
-      if (product.barcode) {
-        pdf.setFontSize(12);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(30, 64, 175);
-        pdf.text('Barcode', 25, currentY);
-        pdf.setFontSize(16);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(0, 0, 0);
-        pdf.text(product.barcode || '', 25, currentY + 10);
-        currentY += 20; // Increased spacing
-      }
-
-      // Warranty Information Section - Matching UI Design (inside the card)
-      currentY += 10; // Increased spacing before warranty section
-      
-      // "Other" Section Header
-      pdf.setFontSize(14);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(0, 0, 0);
-      pdf.text('Other', 25, currentY);
-      currentY += 8;
-      
-      // Blue divider line below "Other" (inside card)
-      pdf.setDrawColor(59, 130, 246); // Blue-500
-      pdf.setLineWidth(1);
-      pdf.line(25, currentY, 185, currentY);
-      currentY += 12; // Spacing after divider
-
-      // Warranty Header with green background (matching UI) - inside card
-      pdf.setFillColor(34, 197, 94); // Green-500
-      pdf.rect(25, currentY - 3, 160, 12, 'F');
-      pdf.setFontSize(16);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(255, 255, 255);
-      pdf.text('Warranty Information', 30, currentY + 5);
-      currentY += 18; // Spacing after banner
-
-      const warrantyStatus = getWarrantyStatus(product.warrantyEnd);
-      
-      // Status with colored badge (matching UI design) - inside card
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'bold');
-      pdf.setTextColor(0, 0, 0);
-      pdf.text('Status:', 25, currentY);
-      
-      // Status badge background (light green for valid)
-      if (warrantyStatus === 'valid') {
-        pdf.setFillColor(220, 252, 231); // Green-100 (light green)
-        pdf.setTextColor(22, 101, 52); // Green-800
-      } else if (warrantyStatus === 'expired') {
-        pdf.setFillColor(254, 226, 226); // Red-100
-        pdf.setTextColor(153, 27, 27); // Red-800
-      } else {
-        pdf.setFillColor(243, 244, 246); // Gray-100
-        pdf.setTextColor(75, 85, 99); // Gray-600
-      }
-      pdf.rect(70, currentY - 5, 50, 10, 'F');
-      pdf.setFontSize(12);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text(warrantyStatus === 'valid' ? 'Valid' : warrantyStatus === 'expired' ? 'Expired' : 'No Warranty', 75, currentY + 2);
-      currentY += 18; // Spacing
-
-      if (product.warrantyStart) {
-        pdf.setFontSize(12);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(0, 0, 0);
-        pdf.text('Start Date:', 25, currentY);
-        pdf.setFontSize(12);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(0, 0, 0);
-        pdf.text(formatDate(product.warrantyStart) || '', 70, currentY);
-        currentY += 15; // Spacing
-      }
-
-      if (product.warrantyEnd) {
-        pdf.setFontSize(12);
-        pdf.setFont('helvetica', 'bold');
-        pdf.setTextColor(0, 0, 0);
-        pdf.text('End Date:', 25, currentY);
-        pdf.setFontSize(12);
-        pdf.setFont('helvetica', 'normal');
-        pdf.setTextColor(0, 0, 0);
-        pdf.text(formatDate(product.warrantyEnd) || '', 70, currentY);
-        currentY += 15; // Spacing
-      }
-      
-      // Purple footer bar at the bottom of the card (matching UI design)
-      // Position it at the very bottom of the card, inside the card boundaries
-      const purpleBarHeight = 8;
-      const purpleBarY = cardY + cardHeight - purpleBarHeight;
-      pdf.setFillColor(168, 85, 247); // Purple-500
-      pdf.rect(15, purpleBarY, 180, purpleBarHeight, 'F');
-
-      // Page 2: Warranty Card with styled header
-      pdf.addPage();
-      
-      // Header with gradient effect
-      pdf.setFillColor(168, 85, 247); // Purple-500
-      pdf.rect(0, 0, 210, 50, 'F'); // Increased header height
-      
-      pdf.setTextColor(255, 255, 255);
-      pdf.setFontSize(28);
-      pdf.setFont('helvetica', 'bold');
-      pdf.text('Warranty Card', 105, 30, { align: 'center' }); // Centered vertically
-      
-      if (warrantyImageUrl && warrantyDoc) {
-        // Convert blob to image and add to PDF
-        const img = new Image();
-        img.src = warrantyImageUrl;
-        
-        await new Promise((resolve) => {
-          img.onload = () => {
-            const imgWidth = img.width;
-            const imgHeight = img.height;
-            const pdfWidth = 180; // Increased width for better visibility
-            const pdfHeight = (imgHeight * pdfWidth) / imgWidth;
-            
-            // Center the image with more margin
-            let xPos = (210 - pdfWidth) / 2;
-            const yPos = 60; // Increased top margin
-            
-            // If image is too tall, scale it down
-            if (pdfHeight > 200) {
-              const scale = 200 / pdfHeight;
-              const scaledWidth = pdfWidth * scale;
-              const scaledHeight = pdfHeight * scale;
-              xPos = (210 - scaledWidth) / 2;
-              pdf.addImage(warrantyImageUrl, 'PNG', xPos, yPos, scaledWidth, scaledHeight);
-            } else {
-              pdf.addImage(warrantyImageUrl, 'PNG', xPos, yPos, pdfWidth, pdfHeight);
-            }
-            
-            resolve(null);
-          };
-          img.onerror = () => resolve(null);
-        });
-      }
-
-      // Save PDF
-      const fileName = `Warranty_${product.itemCode}_${new Date().toISOString().split('T')[0]}.pdf`;
-      pdf.save(fileName);
-      
+      await generateWarrantyCertificatePdf(product, warrantyImageUrl);
       playBeep('success');
       toast.success('Warranty PDF generated successfully!');
     } catch (error) {

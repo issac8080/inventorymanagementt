@@ -1,0 +1,2 @@
+-- Archived: PostgreSQL / Supabase setup is no longer used by this app.
+-- Cloud data is stored in Firebase Firestore. See SETUP.md and firestore.rules.

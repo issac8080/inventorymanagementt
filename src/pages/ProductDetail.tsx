@@ -6,19 +6,28 @@ import { Card } from '@/components/common/Card';
 import { QRCodeGenerator } from '@/components/qrcode/QRCodeGenerator';
 import { QRScanner } from '@/components/scanner/QRScanner';
 import { productDb, warrantyDb } from '@/services/database/db';
-import { Product, WarrantyDocument } from '@/types';
-import { formatDate, getWarrantyStatus } from '@/utils/warrantyCalculator';
+import { Product } from '@/types';
+import { getWarrantyStatus } from '@/utils/warrantyCalculator';
 import { formatDate as formatDateUtil } from '@/utils/dateUtils';
 import { extractItemCodeFromQR } from '@/utils/qrCodeUrl';
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog';
 import { playBeep } from '@/utils/sounds';
 import toast from 'react-hot-toast';
 
+function formatPurchaseLine(product: Product): string | null {
+  if (product.purchasePrice == null || Number.isNaN(product.purchasePrice)) return null;
+  const cur = product.currency || 'USD';
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: cur }).format(product.purchasePrice);
+  } catch {
+    return `${product.purchasePrice} ${cur}`;
+  }
+}
+
 export default function ProductDetail() {
   const { itemCode } = useParams<{ itemCode: string }>();
   const navigate = useNavigate();
   const [product, setProduct] = useState<Product | null>(null);
-  const [warrantyDoc, setWarrantyDoc] = useState<WarrantyDocument | null>(null);
   const [warrantyImageUrl, setWarrantyImageUrl] = useState<string | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
@@ -40,7 +49,6 @@ export default function ProductDetail() {
         // Load warranty document
         const doc = await warrantyDb.getByProductId(foundProduct.id);
         if (doc) {
-          setWarrantyDoc(doc);
           const imageUrl = URL.createObjectURL(doc.imageBlob);
           setWarrantyImageUrl(imageUrl);
         }
@@ -95,6 +103,7 @@ export default function ProductDetail() {
   }
 
   const warrantyStatus = getWarrantyStatus(product.warrantyEnd);
+  const purchaseLine = formatPurchaseLine(product);
 
   return (
     <div className="min-h-screen p-3 sm:p-4 max-w-2xl mx-auto">
@@ -136,6 +145,27 @@ export default function ProductDetail() {
               <div>
                 <span className="text-lg font-semibold text-gray-600">Barcode</span>
                 <p className="text-xl font-mono">{product.barcode}</p>
+              </div>
+            )}
+
+            {product.location && (
+              <div>
+                <span className="text-lg font-semibold text-gray-600">Location</span>
+                <p className="text-xl">{product.location}</p>
+              </div>
+            )}
+
+            {product.notes && (
+              <div>
+                <span className="text-lg font-semibold text-gray-600">Notes</span>
+                <p className="text-xl whitespace-pre-wrap">{product.notes}</p>
+              </div>
+            )}
+
+            {purchaseLine && (
+              <div>
+                <span className="text-lg font-semibold text-gray-600">Purchase value</span>
+                <p className="text-xl">{purchaseLine}</p>
               </div>
             )}
           </div>
@@ -238,7 +268,7 @@ export default function ProductDetail() {
         message="Are you sure you want to delete this product? This action cannot be undone."
         confirmText="Delete"
         cancelText="Cancel"
-        variant="danger"
+        confirmVariant="danger"
       />
 
       {showQRScanner && (

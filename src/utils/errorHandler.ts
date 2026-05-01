@@ -60,6 +60,52 @@ export enum ErrorCode {
   UNKNOWN_ERROR = 'UNKNOWN_ERROR',
 }
 
+/** Readable message from Error, PostgREST errors, or unknown values */
+export function extractErrorMessage(error: unknown): string {
+  if (error == null) return '';
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object' && 'message' in error) {
+    const m = (error as { message: unknown }).message;
+    return typeof m === 'string' ? m : String(m);
+  }
+  return String(error);
+}
+
+/**
+ * True when the browser could not complete the HTTP request (offline, DNS, TLS, CORS, blocked, wrong URL).
+ * Firestore/HTTPS clients often surface this as "TypeError: Failed to fetch".
+ */
+export function isCloudNetworkError(error: unknown): boolean {
+  const msg = extractErrorMessage(error).toLowerCase();
+  if (!msg) return false;
+  return (
+    msg.includes('failed to fetch') ||
+    msg.includes('fetch failed') ||
+    msg.includes('load failed') ||
+    msg.includes('networkerror') ||
+    msg.includes('network request failed') ||
+    msg.includes('econnrefused') ||
+    msg.includes('err_connection') ||
+    msg.includes('err_name_not_resolved') ||
+    msg.includes('cors policy') ||
+    msg.includes('blocked by cors') ||
+    msg.includes('net::err') ||
+    (msg.includes('typeerror') && msg.includes('fetch'))
+  );
+}
+
+/** @deprecated Use isCloudNetworkError */
+export const isSupabaseUnreachableError = isCloudNetworkError;
+
+/** User-facing copy when cloud APIs fail to connect */
+export const CLOUD_NETWORK_FAILED_HINT =
+  'Could not reach the cloud service. Check your internet and VPN. Confirm Firebase config in .env (VITE_FIREBASE_*), ' +
+  'restart the dev server after changes, and ensure ad blockers are not blocking Google/Firebase endpoints.';
+
+/** @deprecated Use CLOUD_NETWORK_FAILED_HINT */
+export const SUPABASE_CONNECTION_FAILED_HINT = CLOUD_NETWORK_FAILED_HINT;
+
 export function handleError(error: unknown, context?: string): AppError {
   // Log error for debugging
   console.error(`[Error Handler] ${context || 'Unknown context'}:`, error);
@@ -83,6 +129,15 @@ export function handleError(error: unknown, context?: string): AppError {
     }
     
     // Network errors
+    if (isCloudNetworkError(error)) {
+      return new AppError(
+        error.message,
+        ErrorCode.NETWORK_ERROR,
+        CLOUD_NETWORK_FAILED_HINT,
+        true,
+        { originalError: error.message, context }
+      );
+    }
     if (error.message.includes('fetch') || error.message.includes('network')) {
       return new AppError(
         error.message,

@@ -27,7 +27,17 @@ export const ProductSchema = z.object({
       val => !val || /^\d{8,14}$/.test(val),
       'Barcode must be 8-14 digits'
     ),
-  
+
+  location: z.string().max(120, 'Location must be 120 characters or less').optional(),
+  notes: z.string().max(2000, 'Notes must be 2000 characters or less').optional(),
+
+  purchasePrice: z.number().nonnegative().max(1e12).optional(),
+  currency: z
+    .string()
+    .length(3)
+    .regex(/^[A-Z]{3}$/i, 'Use a 3-letter currency code (e.g. INR)')
+    .optional(),
+
   warrantyStart: z.date().optional(),
   warrantyEnd: z.date().optional(),
   warrantyDuration: z.number().int().positive().max(1200).optional(), // Max 100 years in months
@@ -101,6 +111,15 @@ export function validateProduct(data: unknown): {
         ...validated,
         name: sanitizeInput(validated.name),
         category: sanitizeInput(validated.category),
+        ...(validated.location !== undefined
+          ? { location: sanitizeInput(validated.location).slice(0, 120) }
+          : {}),
+        ...(validated.notes !== undefined
+          ? { notes: sanitizeInput(validated.notes).slice(0, 2000) }
+          : {}),
+        ...(validated.currency !== undefined
+          ? { currency: validated.currency.toUpperCase() }
+          : {}),
       },
     };
   } catch (error) {

@@ -5,6 +5,7 @@ import {
   handleError,
   retryWithBackoff,
   safeAsync,
+  CLOUD_NETWORK_FAILED_HINT,
 } from '../errorHandler';
 
 describe('ErrorHandler - Unit Tests', () => {
@@ -48,7 +49,7 @@ describe('ErrorHandler - Unit Tests', () => {
       const result = handleError(error);
       
       expect(result.code).toBe(ErrorCode.NETWORK_ERROR);
-      expect(result.userMessage).toContain('Network error');
+      expect(result.userMessage).toBe(CLOUD_NETWORK_FAILED_HINT);
       expect(result.recoverable).toBe(true);
     });
 

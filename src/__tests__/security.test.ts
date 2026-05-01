@@ -1,16 +1,24 @@
 import { describe, it, expect, vi } from 'vitest';
 import { sanitizeInput, validateProduct, validateBarcode, validateItemCode } from '@/utils/validation';
-import { productDb } from '@/services/database/localDb';
+import { productDb } from '@/services/database/db';
 import { Product } from '@/types';
 import { generateUUID } from '@/utils/uuid';
 
 // Mock database
-vi.mock('@/services/database/localDb', () => ({
+vi.mock('@/services/database/db', () => ({
   productDb: {
     add: vi.fn(),
     getByItemCode: vi.fn(),
     search: vi.fn(),
+    getAll: vi.fn(),
+    getById: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    getByCategory: vi.fn(),
   },
+  warrantyDb: {},
+  isUsingLocalDatabase: () => true,
+  isUsingFirebase: () => false,
 }));
 
 describe('Security Tests', () => {

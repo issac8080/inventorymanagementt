@@ -1,17 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { productDb } from '@/services/database/localDb';
+import { productDb } from '@/services/database/db';
 import { Product } from '@/types';
 import { generateUUID } from '@/utils/uuid';
 import { useProductStore } from '@/stores/productStore';
 
 // Mock database
-vi.mock('@/services/database/localDb', () => ({
+vi.mock('@/services/database/db', () => ({
   productDb: {
     getAll: vi.fn(),
     add: vi.fn(),
     search: vi.fn(),
     getByItemCode: vi.fn(),
+    getById: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    getByCategory: vi.fn(),
   },
+  warrantyDb: {},
+  isUsingLocalDatabase: () => true,
+  isUsingFirebase: () => false,
 }));
 
 describe('Performance Tests', () => {

@@ -1,105 +1,154 @@
 /**
  * Unified database service
- * Uses Supabase as primary database for user-specific, cross-device data
- * Falls back to localDb for offline support if needed
+ * - Firebase Firestore when that cloud backend is active
+ * - Supabase (Postgres + Storage) when that cloud backend is active
+ * - Else IndexedDB (Dexie) on this device
  */
 
-import { supabaseDb } from './supabaseDb';
+import { firestoreProductDb, firestoreWarrantyDb } from './firestoreDb';
+import { supabaseProductDb, supabaseWarrantyDb } from './supabaseDb';
+import { productDb as dexieProductDb, warrantyDb as dexieWarrantyDb } from './localDb';
 import { Product, WarrantyDocument } from '@/types';
+import { getActiveCloudBackend, useCloudDatabaseSync, useFirebaseCloudSync, useSupabaseCloudSync } from './cloudEnv';
 
-// Check if Supabase is configured
-const isSupabaseConfigured = () => {
-  const url = import.meta.env.VITE_SUPABASE_URL;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  return !!(url && key && url !== 'https://placeholder.supabase.co');
-};
+/** True when using Dexie only (no cloud or user chose device-only). */
+export function isUsingLocalDatabase(): boolean {
+  return !useCloudDatabaseSync();
+}
 
-// Export the database service - use Supabase if configured, otherwise throw error
+export function isUsingFirebase(): boolean {
+  return useFirebaseCloudSync();
+}
+
+export function isUsingSupabase(): boolean {
+  return useSupabaseCloudSync();
+}
+
 export const productDb = {
   async getAll(): Promise<Product[]> {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Database not configured. Please set up Supabase environment variables.');
+    if (!useCloudDatabaseSync()) {
+      return await dexieProductDb.getAll();
     }
-    return await supabaseDb.getAllProducts();
+    if (getActiveCloudBackend() === 'supabase') {
+      return await supabaseProductDb.getAll();
+    }
+    return await firestoreProductDb.getAll();
   },
 
   async getById(id: string): Promise<Product | undefined> {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Database not configured. Please set up Supabase environment variables.');
+    if (!useCloudDatabaseSync()) {
+      return await dexieProductDb.getById(id);
     }
-    return await supabaseDb.getProductById(id);
+    if (getActiveCloudBackend() === 'supabase') {
+      return await supabaseProductDb.getById(id);
+    }
+    return await firestoreProductDb.getById(id);
   },
 
   async getByItemCode(itemCode: string): Promise<Product | undefined> {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Database not configured. Please set up Supabase environment variables.');
+    if (!useCloudDatabaseSync()) {
+      return await dexieProductDb.getByItemCode(itemCode);
     }
-    return await supabaseDb.getProductByItemCode(itemCode);
+    if (getActiveCloudBackend() === 'supabase') {
+      return await supabaseProductDb.getByItemCode(itemCode);
+    }
+    return await firestoreProductDb.getByItemCode(itemCode);
   },
 
   async add(product: Product): Promise<string> {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Database not configured. Please set up Supabase environment variables.');
+    if (!useCloudDatabaseSync()) {
+      return await dexieProductDb.add(product);
     }
-    return await supabaseDb.addProduct(product);
+    if (getActiveCloudBackend() === 'supabase') {
+      return await supabaseProductDb.add(product);
+    }
+    return await firestoreProductDb.add(product);
   },
 
   async update(id: string, changes: Partial<Product>): Promise<number> {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Database not configured. Please set up Supabase environment variables.');
+    if (!useCloudDatabaseSync()) {
+      return await dexieProductDb.update(id, changes);
     }
-    return await supabaseDb.updateProduct(id, changes);
+    if (getActiveCloudBackend() === 'supabase') {
+      return await supabaseProductDb.update(id, changes);
+    }
+    return await firestoreProductDb.update(id, changes);
   },
 
   async delete(id: string): Promise<void> {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Database not configured. Please set up Supabase environment variables.');
+    if (!useCloudDatabaseSync()) {
+      return await dexieProductDb.delete(id);
     }
-    return await supabaseDb.deleteProduct(id);
+    if (getActiveCloudBackend() === 'supabase') {
+      return await supabaseProductDb.delete(id);
+    }
+    return await firestoreProductDb.delete(id);
   },
 
   async search(query: string): Promise<Product[]> {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Database not configured. Please set up Supabase environment variables.');
+    if (!useCloudDatabaseSync()) {
+      return await dexieProductDb.search(query);
     }
-    return await supabaseDb.searchProducts(query);
+    if (getActiveCloudBackend() === 'supabase') {
+      return await supabaseProductDb.search(query);
+    }
+    return await firestoreProductDb.search(query);
   },
 
   async getByCategory(category: string): Promise<Product[]> {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Database not configured. Please set up Supabase environment variables.');
+    if (!useCloudDatabaseSync()) {
+      return await dexieProductDb.getByCategory(category);
     }
-    return await supabaseDb.getByCategory(category);
+    if (getActiveCloudBackend() === 'supabase') {
+      return await supabaseProductDb.getByCategory(category);
+    }
+    return await firestoreProductDb.getByCategory(category);
   },
 };
 
 export const warrantyDb = {
   async getByProductId(productId: string): Promise<WarrantyDocument | undefined> {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Database not configured. Please set up Supabase environment variables.');
+    if (!useCloudDatabaseSync()) {
+      return await dexieWarrantyDb.getByProductId(productId);
     }
-    return await supabaseDb.getByProductId(productId);
+    if (getActiveCloudBackend() === 'supabase') {
+      return await supabaseWarrantyDb.getByProductId(productId);
+    }
+    return await firestoreWarrantyDb.getByProductId(productId);
   },
 
   async add(document: WarrantyDocument): Promise<string> {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Database not configured. Please set up Supabase environment variables.');
+    if (!useCloudDatabaseSync()) {
+      return await dexieWarrantyDb.add(document);
     }
-    return await supabaseDb.add(document);
+    if (getActiveCloudBackend() === 'supabase') {
+      return await supabaseWarrantyDb.add(document);
+    }
+    return await firestoreWarrantyDb.add(document);
   },
 
   async delete(id: string): Promise<void> {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Database not configured. Please set up Supabase environment variables.');
+    if (!useCloudDatabaseSync()) {
+      return await dexieWarrantyDb.delete(id);
     }
-    return await supabaseDb.delete(id);
+    if (getActiveCloudBackend() === 'supabase') {
+      return await supabaseWarrantyDb.delete(id);
+    }
+    return await firestoreWarrantyDb.delete(id);
   },
 
   async deleteByProductId(productId: string): Promise<void> {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Database not configured. Please set up Supabase environment variables.');
+    if (!useCloudDatabaseSync()) {
+      return await dexieWarrantyDb.deleteByProductId(productId);
     }
-    return await supabaseDb.deleteByProductId(productId);
+    if (getActiveCloudBackend() === 'supabase') {
+      return await supabaseWarrantyDb.deleteByProductId(productId);
+    }
+    return await firestoreWarrantyDb.deleteByProductId(productId);
   },
 };
 
+/** @deprecated Use useCloudDatabaseSync from ./cloudEnv */
+export function useFirestoreCloudSync(): boolean {
+  return useCloudDatabaseSync() && useFirebaseCloudSync();
+}

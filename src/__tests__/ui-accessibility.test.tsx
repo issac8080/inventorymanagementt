@@ -28,15 +28,14 @@ describe('UI & Accessibility Tests', () => {
       );
       
       // Check for responsive classes
-      const title = screen.getByText('Home Inventory');
+      const title = screen.getByRole('heading', { name: /Initra.*Home Inventory|Home Inventory/i });
       expect(title).toBeInTheDocument();
     });
 
     it('should have proper spacing and padding', () => {
       render(<Card>Content</Card>);
-      const card = screen.getByText('Content').parentElement;
-      
-      expect(card).toHaveClass('p-6');
+      const inner = screen.getByText('Content');
+      expect(inner).toHaveClass('p-6');
     });
   });
 
@@ -123,10 +122,9 @@ describe('UI & Accessibility Tests', () => {
       );
       
       // Should use responsive grid
-      const container = screen.getByText('Home Inventory').closest('.grid');
-      if (container) {
-        expect(container).toHaveClass('grid-cols-1');
-      }
+      const container = screen.getByLabelText('Add new product').closest('.grid');
+      expect(container).toBeTruthy();
+      expect(container).toHaveClass('grid-cols-1');
     });
   });
 
@@ -167,9 +165,10 @@ describe('UI & Accessibility Tests', () => {
         </>
       );
       
-      const cards = screen.getAllByText(/Card \d/);
-      cards.forEach(card => {
-        const cardElement = card.parentElement;
+      const cards = screen.getAllByText(/Card [12]/);
+      cards.forEach((node) => {
+        const cardElement = node.closest('.rounded-lg');
+        expect(cardElement).toBeTruthy();
         expect(cardElement).toHaveClass('bg-white');
         expect(cardElement).toHaveClass('rounded-lg');
       });

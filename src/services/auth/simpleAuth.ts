@@ -1,300 +1,537 @@
-import { supabase } from '../database/supabase';
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'firebase/auth';
+import { isFirebaseConfigured, INITRA_FORCE_LOCAL_DB_KEY } from '../database/firebaseEnv';
+import { getActiveCloudBackend, isSupabaseConfigured, useCloudDatabaseSync } from '../database/cloudEnv';
+import { getFirebaseAuth } from '../database/firebase';
+import { getSupabaseBrowserClient } from '../database/supabaseClient';
+import * as firestoreAuth from './firestoreAuth';
+import * as supabaseAuth from './supabaseAuth';
+import { loginKeyToAuthEmail } from './authEmail';
+import type { AppUser } from '@/types/appUser';
+import {
+  BUILTIN_ADMIN_LOGIN,
+  BUILTIN_ADMIN_PASSWORD,
+  BUILTIN_USER_LOGIN,
+  BUILTIN_USER_PASSWORD,
+  normalizeLoginId,
+} from './builtinAccounts';
+import {
+  addLocalManagedUser,
+  deleteLocalManagedUser,
+  findLocalManagedLogin,
+  getLocalManagedUsers,
+} from './localManagedUsers';
+import { assertValidSignupContact, isUserNotFoundAuthError, parseContactForAuth } from './identifierAuth';
+import { extractErrorMessage } from '@/utils/errorHandler';
+import { getFirestoreUserMessage } from '@/utils/firebaseFirestoreErrors';
 import toast from 'react-hot-toast';
 
-// Check if Supabase is properly configured
-const isSupabaseConfigured = () => {
-  const url = import.meta.env.VITE_SUPABASE_URL;
-  const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  return url && key && !url.includes('placeholder') && !key.includes('placeholder');
-};
+export type User = AppUser;
 
-export interface User {
-  id: string;
-  mobile: string;
-  password: string; // Plaintext - as requested
-  username?: string;
-  created_at: string;
+async function firebaseSignInWithLegacyFallback(login: string, password: string) {
+  const auth = getFirebaseAuth();
+  const parsed = parseContactForAuth(login, 'firebase');
+  try {
+    return await signInWithEmailAndPassword(auth, parsed.authEmail, password);
+  } catch (firstErr) {
+    if (!isUserNotFoundAuthError(firstErr)) {
+      throw firstErr;
+    }
+    const legacyEmail = loginKeyToAuthEmail(normalizeLoginId(login.trim()));
+    if (legacyEmail !== parsed.authEmail) {
+      return await signInWithEmailAndPassword(auth, legacyEmail, password);
+    }
+    throw firstErr;
+  }
+}
+function authErrorToast(error: unknown, fallback: string): void {
+  const firestoreMsg = getFirestoreUserMessage(error);
+  if (firestoreMsg) {
+    toast.error(firestoreMsg);
+    return;
+  }
+  toast.error(extractErrorMessage(error) || fallback);
 }
 
-// Hardcoded admin credentials
-const ADMIN_USERNAME = 'issac';
-const ADMIN_PASSWORD = 'antonio';
+/** Synthetic user when using the app on this device only (no login). */
+export const LOCAL_OFFLINE_USER: User = {
+  id: '00000000-0000-4000-8000-000000000001',
+  mobile: 'local-device',
+  password: '',
+  username: 'This device',
+  created_at: new Date().toISOString(),
+};
+
+const BUILTIN_ADMIN_ROW: User = {
+  id: 'builtin-admin',
+  mobile: BUILTIN_ADMIN_LOGIN,
+  password: '',
+  username: 'Administrator (built-in)',
+  created_at: new Date(0).toISOString(),
+};
+
+const BUILTIN_USER_ROW: User = {
+  id: 'builtin-issac',
+  mobile: BUILTIN_USER_LOGIN,
+  password: '',
+  username: 'Issac (built-in)',
+  created_at: new Date(0).toISOString(),
+};
 
 export const simpleAuth = {
-  // Check if user is admin
-  isAdmin(username: string, password: string): boolean {
-    return username.toLowerCase() === ADMIN_USERNAME.toLowerCase() && password === ADMIN_PASSWORD;
-  },
-
-  // Sign up with mobile and password
-  async signup(mobile: string, password: string, username?: string): Promise<{ error: Error | null; user: User | null }> {
-    try {
-      if (!mobile || mobile.trim().length < 10) {
-        throw new Error('Please enter a valid mobile number (at least 10 digits)');
-      }
-
-      if (!password || password.length < 4) {
-        throw new Error('Password must be at least 4 characters');
-      }
-
-      // Check if Supabase is configured
-      if (!isSupabaseConfigured()) {
-        throw new Error('Database connection not configured. Please contact administrator.');
-      }
-
-      const trimmedMobile = mobile.trim();
-
-      // Check if mobile already exists - use maybeSingle() to handle no results gracefully
-      const { data: existing, error: checkError } = await supabase
-        .from('app_users')
-        .select('mobile')
-        .eq('mobile', trimmedMobile)
-        .maybeSingle();
-
-      if (checkError && checkError.code !== 'PGRST116') {
-        // PGRST116 is "not found" which is fine, other errors are real issues
-        throw checkError;
-      }
-
-      if (existing) {
-        throw new Error(`This mobile number (${trimmedMobile}) is already registered. Please use login instead.`);
-      }
-
-      // Create new user
-      const { data, error } = await supabase
-        .from('app_users')
-        .insert({
-          mobile: trimmedMobile,
-          password: password, // Plaintext storage as requested
-          username: username || trimmedMobile,
-          created_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (error) {
-        // Check for unique constraint violation
-        if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
-          throw new Error(`This mobile number (${trimmedMobile}) is already registered. Please use login instead.`);
-        }
-        // Network or connection errors
-        if (error.message?.includes('fetch') || error.message?.includes('network')) {
-          throw new Error('Network error. Please check your internet connection and try again.');
-        }
-        throw error;
-      }
-
-      toast.success('Account created successfully!');
-      return { error: null, user: data };
-    } catch (error: any) {
-      console.error('Signup error:', error);
-      const errorMessage = error.message || 'Failed to create account. Please try again.';
-      toast.error(errorMessage);
-      return { error: error as Error, user: null };
+  continueAsLocalDevice(): void {
+    if (isFirebaseConfigured()) {
+      void signOut(getFirebaseAuth()).catch(() => {});
     }
+    if (isSupabaseConfigured()) {
+      void getSupabaseBrowserClient()
+        .auth.signOut()
+        .catch(() => {});
+    }
+    localStorage.setItem(INITRA_FORCE_LOCAL_DB_KEY, '1');
+    this.saveUser(LOCAL_OFFLINE_USER, false);
+    toast.success('Using inventory saved on this device.');
   },
 
-  // Login with mobile and password
-  async login(mobile: string, password: string): Promise<{ error: Error | null; user: User | null; isAdmin: boolean }> {
+  /** Firebase or Supabase session listener (call once from `App`). */
+  initCloudAuthSync(onSessionChange: () => void): () => void {
+    const backend = getActiveCloudBackend();
+    if (backend === 'firebase') {
+      return this.initFirebaseAuthSync(onSessionChange);
+    }
+    if (backend === 'supabase') {
+      return supabaseAuth.supabaseInitAuthSync((payload) => {
+        if (!payload) {
+          const cur = simpleAuth.getCurrentUser();
+          if (cur && cur.id !== LOCAL_OFFLINE_USER.id) {
+            localStorage.removeItem('currentUser');
+            localStorage.removeItem('isAdmin');
+          }
+        } else {
+          localStorage.removeItem(INITRA_FORCE_LOCAL_DB_KEY);
+          simpleAuth.saveUser(payload.user, payload.isAdmin);
+        }
+        onSessionChange();
+      });
+    }
+    return () => {};
+  },
+
+  /**
+   * Keeps localStorage in sync when Firebase Auth restores a session (page reload).
+   */
+  initFirebaseAuthSync(onSessionChange: () => void): () => void {
+    if (!isFirebaseConfigured()) {
+      return () => {};
+    }
+    const auth = getFirebaseAuth();
+    return onAuthStateChanged(auth, async (firebaseUser) => {
+      try {
+        if (!firebaseUser) {
+          const cur = simpleAuth.getCurrentUser();
+          if (cur && cur.id !== LOCAL_OFFLINE_USER.id) {
+            localStorage.removeItem('currentUser');
+            localStorage.removeItem('isAdmin');
+          }
+          onSessionChange();
+          return;
+        }
+
+        const profile = await firestoreAuth.firestoreGetUserProfile(firebaseUser.uid);
+        const mobile = profile?.mobile ?? '';
+        if (!mobile) {
+          await signOut(auth).catch(() => {});
+          localStorage.removeItem('currentUser');
+          localStorage.removeItem('isAdmin');
+          toast.error('Cloud account is missing a profile. Ask an admin to fix app_users in Firebase.');
+          onSessionChange();
+          return;
+        }
+
+        const isAdmin = profile?.isAdmin === true;
+        localStorage.removeItem(INITRA_FORCE_LOCAL_DB_KEY);
+        simpleAuth.saveUser(
+          {
+            id: firebaseUser.uid,
+            mobile,
+            password: '',
+            username: profile?.username,
+            created_at: profile?.created_at ?? new Date().toISOString(),
+            isAdmin,
+          },
+          isAdmin
+        );
+        onSessionChange();
+      } catch (e) {
+        console.error('Firebase auth sync error:', e);
+        onSessionChange();
+      }
+    });
+  },
+
+  async login(
+    login: string,
+    password: string
+  ): Promise<{ error: Error | null; user: User | null; isAdmin: boolean }> {
     try {
-      if (!mobile || !password) {
-        throw new Error('Please enter mobile number and password');
+      if (!login.trim() || !password) {
+        throw new Error('Please enter your email or phone and password');
       }
 
-      // Check if admin login (allow both mobile field and username)
-      const mobileOrUsername = mobile.trim().toLowerCase();
-      if (this.isAdmin(mobileOrUsername, password)) {
-        const adminUser: User = { 
-          id: 'admin', 
-          mobile: 'admin', 
-          password: '', 
-          username: 'Admin', 
-          created_at: new Date().toISOString() 
+      const lid = normalizeLoginId(login);
+
+      if (!useCloudDatabaseSync()) {
+        if (lid === BUILTIN_ADMIN_LOGIN && password === BUILTIN_ADMIN_PASSWORD) {
+          const adminUser: User = {
+            id: 'admin',
+            mobile: BUILTIN_ADMIN_LOGIN,
+            password: '',
+            username: 'Administrator',
+            created_at: new Date().toISOString(),
+          };
+          toast.success('Signed in as admin');
+          return { error: null, user: adminUser, isAdmin: true };
+        }
+
+        if (lid === BUILTIN_USER_LOGIN && password === BUILTIN_USER_PASSWORD) {
+          const u: User = {
+            id: 'user-issac',
+            mobile: BUILTIN_USER_LOGIN,
+            password: '',
+            username: 'Issac',
+            created_at: new Date().toISOString(),
+          };
+          toast.success('Signed in');
+          return { error: null, user: u, isAdmin: false };
+        }
+
+        const local = findLocalManagedLogin(login, password);
+        if (local) {
+          toast.success('Signed in');
+          return { error: null, user: local, isAdmin: false };
+        }
+
+        throw new Error('Invalid email, phone, or password');
+      }
+
+      if (getActiveCloudBackend() === 'supabase') {
+        const parsed = parseContactForAuth(login);
+        const sb = getSupabaseBrowserClient();
+        const { data, error } = await sb.auth.signInWithPassword({
+          email: parsed.authEmail,
+          password,
+        });
+        if (error) throw error;
+        if (!data.user?.id) throw new Error('Sign-in failed');
+        const profile = await supabaseAuth.supabaseFetchProfile(data.user.id);
+        const mobile = profile?.mobile ?? '';
+        if (!profile || !mobile) {
+          await sb.auth.signOut().catch(() => {});
+          throw new Error('Account is missing a profile row. Run supabase-schema.sql in your Supabase project.');
+        }
+        const isAdmin = profile.isAdmin === true;
+        localStorage.removeItem(INITRA_FORCE_LOCAL_DB_KEY);
+        const user: User = {
+          id: data.user.id,
+          mobile,
+          password: '',
+          username: profile.username,
+          created_at: profile.created_at,
+          isAdmin,
         };
-        toast.success('Admin login successful!');
-        return { error: null, user: adminUser, isAdmin: true };
+        toast.success(isAdmin ? 'Signed in as admin' : 'Signed in');
+        return { error: null, user, isAdmin };
       }
 
-      // Regular user login - validate mobile format
-      const trimmedMobile = mobile.trim();
-      if (!/^\d{10,15}$/.test(trimmedMobile)) {
-        throw new Error('Please enter a valid mobile number (10-15 digits)');
+      const cred = await firebaseSignInWithLegacyFallback(login, password);
+      const profile = await firestoreAuth.firestoreGetUserProfile(cred.user.uid);
+      const mobile = profile?.mobile ?? '';
+      if (!profile || !mobile) {
+        await signOut(getFirebaseAuth()).catch(() => {});
+        throw new Error(
+          'Account exists but has no profile document. An admin must create app_users/{yourUid} in Firestore.'
+        );
       }
 
-      // Check if Supabase is configured
-      if (!isSupabaseConfigured()) {
-        throw new Error('Database connection not configured. Please contact administrator.');
-      }
-
-      const { data, error } = await supabase
-        .from('app_users')
-        .select('*')
-        .eq('mobile', trimmedMobile)
-        .eq('password', password) // Direct comparison - plaintext
-        .maybeSingle();
-
-      // Handle Supabase errors
-      if (error) {
-        // PGRST116 is "not found" - user doesn't exist
-        if (error.code === 'PGRST116') {
-          throw new Error('Invalid mobile number or password');
-        }
-        // Network or connection errors
-        if (error.message?.includes('fetch') || error.message?.includes('network')) {
-          throw new Error('Network error. Please check your internet connection and try again.');
-        }
-        throw new Error(`Login failed: ${error.message || 'Unknown error'}`);
-      }
-
-      // No data means user not found
-      if (!data) {
-        throw new Error('Invalid mobile number or password');
-      }
-
-      toast.success('Logged in successfully!');
-      return { error: null, user: data, isAdmin: false };
-    } catch (error: any) {
+      const isAdmin = profile.isAdmin === true;
+      localStorage.removeItem(INITRA_FORCE_LOCAL_DB_KEY);
+      const user: User = {
+        id: cred.user.uid,
+        mobile,
+        password: '',
+        username: profile.username,
+        created_at: profile.created_at,
+        isAdmin,
+      };
+      toast.success(isAdmin ? 'Signed in as admin' : 'Signed in');
+      return { error: null, user, isAdmin };
+    } catch (error: unknown) {
       console.error('Login error:', error);
-      toast.error(error.message || 'Invalid mobile number or password.');
+      authErrorToast(error, 'Invalid email, phone, or password.');
       return { error: error as Error, user: null, isAdmin: false };
     }
   },
 
-  // Get all users (admin only)
+  async signup(
+    login: string,
+    password: string,
+    confirmPassword: string,
+    displayName?: string
+  ): Promise<{ error: Error | null; user: User | null; isAdmin: boolean }> {
+    try {
+      if (!login.trim()) {
+        throw new Error('Please enter your email or phone number');
+      }
+      if (!password) {
+        throw new Error('Please choose a password');
+      }
+      if (password.length < 6) {
+        throw new Error('Password must be at least 6 characters');
+      }
+      if (password !== confirmPassword) {
+        throw new Error('Passwords do not match');
+      }
+
+      const label = (displayName ?? '').trim();
+
+      if (!useCloudDatabaseSync()) {
+        const user = addLocalManagedUser(login, password, label);
+        toast.success('Account created — you are signed in');
+        return { error: null, user, isAdmin: false };
+      }
+
+      if (getActiveCloudBackend() === 'supabase') {
+        const parsed = assertValidSignupContact(login);
+        const sb = getSupabaseBrowserClient();
+        const { data, error } = await sb.auth.signUp({
+          email: parsed.authEmail,
+          password,
+          options: {
+            data: {
+              login_key: parsed.loginKey,
+              username: label || parsed.loginKey,
+            },
+          },
+        });
+        if (error) throw error;
+        if (!data.session?.user) {
+          throw new Error(
+            'Confirm your email if Supabase requires it (Authentication → Providers → Email), or disable “Confirm email”.'
+          );
+        }
+        const profile = await supabaseAuth.supabaseFetchProfile(data.session.user.id);
+        const mobile = profile?.mobile ?? '';
+        if (!profile || !mobile) {
+          await sb.auth.signOut().catch(() => {});
+          throw new Error('Profile was not created. Add the SQL trigger from supabase-schema.sql in Supabase.');
+        }
+        const isAdmin = profile.isAdmin === true;
+        localStorage.removeItem(INITRA_FORCE_LOCAL_DB_KEY);
+        const user: User = {
+          id: data.session.user.id,
+          mobile,
+          password: '',
+          username: profile.username,
+          created_at: profile.created_at,
+          isAdmin,
+        };
+        toast.success('Account created — you are signed in');
+        return { error: null, user, isAdmin };
+      }
+
+      await firestoreAuth.firestoreSignupUser(login, password, label || undefined, {
+        isAdmin: false,
+        createOnDefaultAuth: true,
+      });
+      const auth = getFirebaseAuth();
+      const cred = auth.currentUser;
+      if (!cred) {
+        throw new Error('Could not establish session after sign-up. Try signing in.');
+      }
+      const profile = await firestoreAuth.firestoreGetUserProfile(cred.user.uid);
+      const mobile = profile?.mobile ?? '';
+      if (!profile || !mobile) {
+        await signOut(getFirebaseAuth()).catch(() => {});
+        throw new Error('Account was created but profile is missing. Contact an administrator.');
+      }
+      const isAdmin = profile.isAdmin === true;
+      localStorage.removeItem(INITRA_FORCE_LOCAL_DB_KEY);
+      const user: User = {
+        id: cred.user.uid,
+        mobile,
+        password: '',
+        username: profile.username,
+        created_at: profile.created_at,
+        isAdmin,
+      };
+      toast.success('Account created — you are signed in');
+      return { error: null, user, isAdmin };
+    } catch (error: unknown) {
+      console.error('Signup error:', error);
+      authErrorToast(error, 'Could not create account.');
+      return { error: error as Error, user: null, isAdmin: false };
+    }
+  },
   async getAllUsers(): Promise<User[]> {
     try {
-      // Check if user is admin before fetching
       if (!this.isCurrentUserAdmin()) {
         throw new Error('Unauthorized: Admin access required');
       }
 
-      // Check if Supabase is configured
-      if (!isSupabaseConfigured()) {
-        throw new Error('Database connection not configured. Please contact administrator.');
+      if (!useCloudDatabaseSync()) {
+        return [BUILTIN_ADMIN_ROW, BUILTIN_USER_ROW, ...getLocalManagedUsers()];
       }
 
-      const { data, error } = await supabase
-        .from('app_users')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Supabase error:', error);
-        toast.error(`Failed to load users: ${error.message}`);
-        throw error;
+      if (getActiveCloudBackend() === 'supabase') {
+        try {
+          return await supabaseAuth.supabaseListProfiles();
+        } catch (err) {
+          console.error('getAllUsers supabase:', err);
+          authErrorToast(err, 'Could not load users from Supabase');
+          return [];
+        }
       }
-      
-      return data || [];
-    } catch (error: any) {
+
+      const out: User[] = [];
+      try {
+        const fs = await firestoreAuth.firestoreGetAllUsers();
+        const seen = new Set(out.map((u) => u.mobile));
+        for (const row of fs) {
+          if (!seen.has(row.mobile)) {
+            seen.add(row.mobile);
+            out.push({
+              id: row.id,
+              mobile: row.mobile,
+              password: '',
+              username: row.username,
+              created_at: row.created_at,
+              isAdmin: row.isAdmin,
+            });
+          }
+        }
+      } catch (err) {
+        console.error('getAllUsers firestore:', err);
+        authErrorToast(err, 'Could not load users from cloud');
+      }
+
+      return out;
+    } catch (error: unknown) {
       console.error('Get all users error:', error);
-      if (error.message && !error.message.includes('Unauthorized')) {
-        toast.error(error.message || 'Failed to load users');
+      if (
+        error instanceof Error &&
+        error.message &&
+        !error.message.includes('Unauthorized')
+      ) {
+        authErrorToast(error, 'Failed to load users');
       }
       return [];
     }
   },
 
-  // Logout
   logout(): void {
+    if (isFirebaseConfigured()) {
+      void signOut(getFirebaseAuth()).catch(() => {});
+    }
+    if (isSupabaseConfigured()) {
+      void getSupabaseBrowserClient()
+        .auth.signOut()
+        .catch(() => {});
+    }
     localStorage.removeItem('currentUser');
     localStorage.removeItem('isAdmin');
-    toast.success('Logged out successfully!');
+    toast.success('Signed out');
   },
 
-  // Get current user from localStorage
   getCurrentUser(): User | null {
     const userStr = localStorage.getItem('currentUser');
     if (!userStr) return null;
     try {
-      return JSON.parse(userStr);
+      return JSON.parse(userStr) as User;
     } catch {
       return null;
     }
   },
 
-  // Check if current user is admin
   isCurrentUserAdmin(): boolean {
     return localStorage.getItem('isAdmin') === 'true';
   },
 
-  // Save user to localStorage
   saveUser(user: User, isAdmin: boolean = false): void {
     localStorage.setItem('currentUser', JSON.stringify(user));
     localStorage.setItem('isAdmin', isAdmin.toString());
   },
 
-  // Create user (admin only)
-  async createUser(mobile: string, password: string, username?: string): Promise<{ error: Error | null; user: User | null }> {
+  async createUser(
+    loginId: string,
+    password: string,
+    displayUsername?: string
+  ): Promise<{ error: Error | null; user: User | null }> {
     try {
-      // Check if user is admin before creating
       if (!this.isCurrentUserAdmin()) {
         throw new Error('Unauthorized: Admin access required');
       }
 
-      if (!mobile || mobile.trim().length < 10) {
-        throw new Error('Please enter a valid mobile number (at least 10 digits)');
+      assertValidSignupContact(loginId);
+
+      if (!password) {
+        throw new Error('Password is required');
       }
-
-      if (!password || password.length < 4) {
-        throw new Error('Password must be at least 4 characters');
-      }
-
-      // Check if Supabase is configured
-      if (!isSupabaseConfigured()) {
-        throw new Error('Database connection not configured. Please contact administrator.');
-      }
-
-      const trimmedMobile = mobile.trim();
-
-      // Check if mobile already exists - use maybeSingle() to handle no results gracefully
-      const { data: existing, error: checkError } = await supabase
-        .from('app_users')
-        .select('mobile')
-        .eq('mobile', trimmedMobile)
-        .maybeSingle();
-
-      if (checkError && checkError.code !== 'PGRST116') {
-        // PGRST116 is "not found" which is fine, other errors are real issues
-        throw checkError;
-      }
-
-      if (existing) {
-        throw new Error(`This mobile number (${trimmedMobile}) already exists. Please choose a different number.`);
-      }
-
-      // Create new user
-      const { data, error } = await supabase
-        .from('app_users')
-        .insert({
-          mobile: trimmedMobile,
-          password: password, // Plaintext storage as requested
-          username: username || trimmedMobile,
-          created_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (error) {
-        // Check for unique constraint violation
-        if (error.code === '23505' || error.message?.includes('duplicate') || error.message?.includes('unique')) {
-          throw new Error(`This mobile number (${trimmedMobile}) already exists. Please choose a different number.`);
+      if (useCloudDatabaseSync()) {
+        if (password.length < 6) {
+          throw new Error('Cloud accounts require a password of at least 6 characters.');
         }
-        throw error;
+      } else if (password.length < 3) {
+        throw new Error('Password must be at least 3 characters');
       }
 
-      toast.success('User created successfully!');
-      return { error: null, user: data };
-    } catch (error: any) {
+      if (getActiveCloudBackend() === 'supabase') {
+        throw new Error(
+          'Supabase: create users in the Dashboard → Authentication → Users, then add matching rows in public.profiles (see supabase-schema.sql).'
+        );
+      }
+
+      if (getActiveCloudBackend() === 'firebase') {
+        try {
+          const created = await firestoreAuth.firestoreCreateUser(
+            loginId.trim(),
+            password,
+            displayUsername?.trim() || undefined
+          );
+          toast.success('User created — share their email or phone and password');
+          const user: User = {
+            id: created.id,
+            mobile: created.mobile,
+            password: '',
+            username: created.username,
+            created_at: created.created_at,
+            isAdmin: created.isAdmin,
+          };
+          return { error: null, user };
+        } catch (err: unknown) {
+          if (
+            err instanceof Error &&
+            (err.message.includes('already') || err.message.includes('registered'))
+          ) {
+            throw new Error(err.message);
+          }
+          throw err;
+        }
+      }
+
+      const user = addLocalManagedUser(
+        loginId.trim(),
+        password,
+        displayUsername?.trim() || ''
+      );
+      toast.success('User saved in this browser — share their sign-in details');
+      return { error: null, user };
+    } catch (error: unknown) {
       console.error('Create user error:', error);
-      toast.error(error.message || 'Failed to create user. Please try again.');
+      authErrorToast(error, 'Failed to create user');
       return { error: error as Error, user: null };
     }
   },
-
-  // Delete user (admin only)
   async deleteUser(userId: string): Promise<{ error: Error | null; success: boolean }> {
     try {
-      // Check if user is admin before deleting
       if (!this.isCurrentUserAdmin()) {
         throw new Error('Unauthorized: Admin access required');
       }
@@ -303,20 +540,34 @@ export const simpleAuth = {
         throw new Error('User ID is required');
       }
 
-      const { error } = await supabase
-        .from('app_users')
-        .delete()
-        .eq('id', userId);
+      if (userId === 'builtin-admin' || userId === 'builtin-issac' || userId === 'admin' || userId === 'user-issac') {
+        throw new Error('Cannot delete built-in accounts');
+      }
 
-      if (error) throw error;
+      const localRows = getLocalManagedUsers();
+      if (localRows.some((u) => u.id === userId)) {
+        deleteLocalManagedUser(userId);
+        toast.success('User removed');
+        return { error: null, success: true };
+      }
 
-      toast.success('User deleted successfully!');
+      if (!useCloudDatabaseSync()) {
+        throw new Error('User not found or only stored in cloud');
+      }
+
+      if (getActiveCloudBackend() === 'supabase') {
+        await supabaseAuth.supabaseDeleteProfileRow(userId);
+        toast.success('Profile removed. Delete the user under Supabase → Authentication if they should lose sign-in.');
+        return { error: null, success: true };
+      }
+
+      await firestoreAuth.firestoreDeleteUser(userId);
+      toast.success('User removed from directory. Delete the sign-in from Firebase Authentication if needed.');
       return { error: null, success: true };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Delete user error:', error);
-      toast.error(error.message || 'Failed to delete user. Please try again.');
+      authErrorToast(error, 'Failed to delete user');
       return { error: error as Error, success: false };
     }
   },
 };
-

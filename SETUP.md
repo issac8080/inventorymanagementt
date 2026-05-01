@@ -1,113 +1,40 @@
-# Setup Guide - Authentication & Database
+# Setup Guide — Firebase (Firestore)
 
-This guide will help you set up Supabase authentication and database for the Initra Home inventroymanagement app by issac.
+This app uses **Firebase Firestore** for cloud login and data. Without Firebase env vars, use **Continue on this device only** on the login screen (IndexedDB).
 
 ## Prerequisites
 
-- A Supabase account (free tier available at https://supabase.com)
-- Node.js and npm installed
+- A [Firebase](https://firebase.google.com/) project
+- Node.js and npm
 
-## Step 1: Create Supabase Project
+## Step 1: Create a Firebase project
 
-1. Go to https://supabase.com and sign up/login
-2. Click "New Project"
-3. Fill in:
-   - **Name**: Initra Home Inventory (or any name)
-   - **Database Password**: Choose a strong password (save it!)
-   - **Region**: Choose closest to your users
-4. Click "Create new project" and wait for setup (2-3 minutes)
+1. Go to [Firebase Console](https://console.firebase.google.com/) and create a project (or use an existing one).
+2. Add a **Web** app and copy the config values.
 
-## Step 2: Set Up Database Schema
+## Step 2: Enable Firestore
 
-1. In your Supabase project, go to **SQL Editor** (left sidebar)
-2. Click "New query"
-3. Copy and paste the entire contents of `supabase-schema.sql`
-4. Click "Run" (or press Ctrl+Enter)
-5. You should see "Success. No rows returned"
+1. In the project, open **Build → Firestore Database**.
+2. Create database → **Start in production mode** (you will replace rules) or test mode for quick dev.
+3. Publish rules from this repo: copy `firestore.rules` into **Firestore → Rules** → **Publish** (or use Firebase CLI: `firebase deploy --only firestore:rules`).
 
-## Step 3: Get API Credentials
+## Step 3: Environment variables
 
-1. Go to **Settings** → **API** (left sidebar)
-2. Copy the following:
-   - **Project URL** (under "Project URL")
-   - **anon public** key (under "Project API keys")
+1. Create `.env` or `.env.local` in the project root.
+2. Set the variables from `.env.example` (at minimum `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_APP_ID`; others have sensible defaults in code).
 
-## Step 4: Configure Environment Variables
+Restart `npm run dev` after any change to `.env`.
 
-1. Create a `.env.local` file in the project root (if it doesn't exist)
-2. Add the following:
-
-```env
-VITE_SUPABASE_URL=your-project-url-here
-VITE_SUPABASE_ANON_KEY=your-anon-key-here
-```
-
-Replace `your-project-url-here` and `your-anon-key-here` with the values from Step 3.
-
-## Step 5: Configure Email Template
-
-1. Go to **Authentication** → **Email Templates** (left sidebar)
-2. Click on **"Magic Link"** template
-3. Update the subject to: `Your OTP for Initra Home inventroymanagement app by issac`
-4. Update the email body to include: `Initra Home inventroymanagement app by issac`
-5. Click "Save"
-
-## Step 6: Install Dependencies
-
-The Supabase dependency should already be installed, but if not:
+## Step 4: Run the app
 
 ```bash
-npm install @supabase/supabase-js
+npm install
+npm run dev
 ```
 
-## Step 7: Test the Application
-
-1. Start the development server:
-   ```bash
-   npm run dev
-   ```
-
-2. Navigate to the login page
-3. Enter your email address
-4. Check your email for the OTP code
-5. Enter the OTP
-6. Set your username and password
-7. You should now be logged in!
-
-## Features Implemented
-
-✅ **Email + OTP Authentication**: Users login with email and receive OTP
-✅ **Username/Password Setup**: After OTP verification, users set username and password
-✅ **User-Specific Data**: Each user can only see their own products and warranties
-✅ **Cross-Device Access**: Data syncs across all devices when logged in
-✅ **PostgreSQL Database**: Using Supabase (PostgreSQL-based, not MySQL/MongoDB)
-✅ **Branding**: "Initra Home inventroymanagement app by issac" throughout the app
+Sign up with a **10–15 digit** mobile number and a password (min 4 characters). Optional admin: set `VITE_ADMIN_USERNAME` and `VITE_ADMIN_PASSWORD` for `/admin`.
 
 ## Troubleshooting
 
-### "Database not configured" error
-- Make sure `.env.local` exists and has correct values
-- Restart the dev server after creating `.env.local`
-
-### OTP not received
-- Check spam folder
-- Verify email in Supabase dashboard
-- Check Supabase project email settings
-
-### Can't see my data
-- Make sure you're logged in with the same account
-- Check browser console for errors
-- Verify Row Level Security policies are set up correctly
-
-### Database errors
-- Verify the SQL schema was run successfully
-- Check Supabase dashboard → Database → Tables to see if tables exist
-- Check Supabase dashboard → Authentication → Policies to see if RLS policies exist
-
-## Security Notes
-
-- Row Level Security (RLS) is enabled on all tables
-- Users can only access their own data
-- The anon key is safe to use in the frontend (it's public)
-- Never commit `.env.local` to git (it's already in `.gitignore`)
-
+- **Permission denied**: Rules not published or too strict — use `firestore.rules` from this repo for development.
+- **Database not configured**: Missing Firebase keys or dev server not restarted after editing `.env`.

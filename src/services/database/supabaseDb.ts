@@ -1,374 +1,378 @@
-import { supabase } from './supabase';
-import { Product, WarrantyDocument } from '@/types';
-import { simpleAuth } from '../auth/simpleAuth';
+import { getSupabaseBrowserClient } from './supabaseClient';
+import type { Product, WarrantyDocument } from '@/types';
+
+function sessionLoginKey(): string {
+  const raw = localStorage.getItem('currentUser');
+  if (!raw) throw new Error('User not authenticated');
+  try {
+    const u = JSON.parse(raw) as { mobile?: string };
+    if (!u?.mobile) throw new Error('User not authenticated');
+    return u.mobile;
+  } catch {
+    throw new Error('User not authenticated');
+  }
+}
+
+async function requireUid(): Promise<string> {
+  const sb = getSupabaseBrowserClient();
+  const {
+    data: { user },
+    error,
+  } = await sb.auth.getUser();
+  if (error || !user?.id) throw new Error('User not authenticated');
+  return user.id;
+}
+
+function toDate(v: unknown): Date | undefined {
+  if (!v) return undefined;
+  if (v instanceof Date) return v;
+  if (typeof v === 'string') return new Date(v);
+  return undefined;
+}
+
+function mapProductRow(row: Record<string, unknown>): Product {
+  const pp = row.purchase_price;
+  return {
+    id: (row.id as string) || '',
+    itemCode: (row.item_code as string) || '',
+    name: (row.name as string) || '',
+    category: (row.category as string) || '',
+    barcode: (row.barcode as string) || undefined,
+    qrValue: (row.qr_value as string) || '',
+    location: (row.location as string) || undefined,
+    notes: (row.notes as string) || undefined,
+    purchasePrice: typeof pp === 'number' && !Number.isNaN(pp) ? pp : undefined,
+    currency: typeof row.currency === 'string' ? row.currency : undefined,
+    warrantyStart: toDate(row.warranty_start),
+    warrantyEnd: toDate(row.warranty_end),
+    warrantyDuration: row.warranty_duration as number | undefined,
+    createdAt: toDate(row.created_at) || new Date(),
+    updatedAt: toDate(row.updated_at),
+  };
+}
+
+function canAccessProduct(row: Record<string, unknown>, mobile: string, uid: string): boolean {
+  return row.owner_uid === uid || row.user_mobile === mobile;
+}
+
+async function imageDataToBlob(imageData: string): Promise<Blob> {
+  if (imageData.startsWith('data:')) {
+    const base64Match = imageData.match(/^data:image\/\w+;base64,(.+)$/);
+    if (base64Match?.[1]) {
+      const binaryString = atob(base64Match[1]);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+      const mimeMatch = imageData.match(/^data:(image\/\w+);base64,/);
+      const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
+      return new Blob([bytes], { type: mimeType });
+    }
+    const response = await fetch(imageData);
+    return response.blob();
+  }
+  const binaryString = atob(imageData);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
+  return new Blob([bytes], { type: 'image/png' });
+}
+
+const BUCKET = 'warranties';
 
 export const supabaseDb = {
-  // Products
   async getAllProducts(): Promise<Product[]> {
-    const user = simpleAuth.getCurrentUser();
-    if (!user) throw new Error('User not authenticated');
-
-    const { data, error } = await supabase
+    const mobile = sessionLoginKey();
+    const uid = await requireUid();
+    const sb = getSupabaseBrowserClient();
+    const { data, error } = await sb
       .from('products')
       .select('*')
-      .eq('user_mobile', user.mobile) // Filter by user's mobile
+      .or(`owner_uid.eq.${uid},user_mobile.eq.${mobile}`)
       .order('created_at', { ascending: false });
-
     if (error) throw error;
-    
-    return (data || []).map((row: any) => ({
-      id: row.id,
-      itemCode: row.item_code,
-      name: row.name,
-      category: row.category,
-      barcode: row.barcode,
-      qrValue: row.qr_value,
-      warrantyStart: row.warranty_start ? new Date(row.warranty_start) : undefined,
-      warrantyEnd: row.warranty_end ? new Date(row.warranty_end) : undefined,
-      warrantyDuration: row.warranty_duration,
-      createdAt: new Date(row.created_at),
-      updatedAt: row.updated_at ? new Date(row.updated_at) : undefined,
-    }));
+    const map = new Map<string, Product>();
+    for (const row of data ?? []) {
+      map.set(row.id as string, mapProductRow(row as Record<string, unknown>));
+    }
+    return [...map.values()].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   },
 
   async getProductById(id: string): Promise<Product | undefined> {
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('id', id)
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') return undefined; // Not found
-      throw error;
-    }
-
-    return {
-      id: data.id,
-      itemCode: data.item_code,
-      name: data.name,
-      category: data.category,
-      barcode: data.barcode,
-      qrValue: data.qr_value,
-      warrantyStart: data.warranty_start ? new Date(data.warranty_start) : undefined,
-      warrantyEnd: data.warranty_end ? new Date(data.warranty_end) : undefined,
-      warrantyDuration: data.warranty_duration,
-      createdAt: new Date(data.created_at),
-      updatedAt: data.updated_at ? new Date(data.updated_at) : undefined,
-    };
+    const mobile = sessionLoginKey();
+    const uid = await requireUid();
+    const sb = getSupabaseBrowserClient();
+    const { data, error } = await sb.from('products').select('*').eq('id', id).maybeSingle();
+    if (error || !data) return undefined;
+    const row = data as Record<string, unknown>;
+    if (!canAccessProduct(row, mobile, uid)) return undefined;
+    return mapProductRow(row);
   },
 
   async getProductByItemCode(itemCode: string): Promise<Product | undefined> {
-    const user = simpleAuth.getCurrentUser();
-    if (!user) throw new Error('User not authenticated');
-
-    // Try exact match first (case-sensitive)
-    let { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('item_code', itemCode.trim())
-      .eq('user_mobile', user.mobile) // Ensure user owns this product
-      .maybeSingle();
-
-    // If not found, try case-insensitive search
-    if (error || !data) {
-      const { data: caseInsensitiveData, error: caseError } = await supabase
-        .from('products')
-        .select('*')
-        .eq('user_mobile', user.mobile)
-        .ilike('item_code', itemCode.trim())
-        .maybeSingle();
-      
-      if (caseError && caseError.code !== 'PGRST116') {
-        throw caseError;
-      }
-      
-      if (caseInsensitiveData) {
-        data = caseInsensitiveData;
-        error = null;
-      }
+    const mobile = sessionLoginKey();
+    const uid = await requireUid();
+    const sb = getSupabaseBrowserClient();
+    const trimmed = itemCode.trim();
+    for (const [col, val] of [
+      ['user_mobile', mobile],
+      ['owner_uid', uid],
+    ] as const) {
+      const { data } = await sb.from('products').select('*').eq(col, val).eq('item_code', trimmed).limit(1).maybeSingle();
+      if (data) return mapProductRow(data as Record<string, unknown>);
     }
-
-    if (error) {
-      if (error.code === 'PGRST116') return undefined; // Not found
-      throw error;
-    }
-    
-    if (!data) return undefined;
-
-    return {
-      id: data.id,
-      itemCode: data.item_code,
-      name: data.name,
-      category: data.category,
-      barcode: data.barcode,
-      qrValue: data.qr_value,
-      warrantyStart: data.warranty_start ? new Date(data.warranty_start) : undefined,
-      warrantyEnd: data.warranty_end ? new Date(data.warranty_end) : undefined,
-      warrantyDuration: data.warranty_duration,
-      createdAt: new Date(data.created_at),
-      updatedAt: data.updated_at ? new Date(data.updated_at) : undefined,
-    };
+    const all = await this.getAllProducts();
+    const lower = trimmed.toLowerCase();
+    return all.find((p) => p.itemCode.toLowerCase() === lower);
   },
 
   async addProduct(product: Product): Promise<string> {
-    const user = simpleAuth.getCurrentUser();
-    if (!user) throw new Error('User not authenticated');
-
-    const { data, error } = await supabase
-      .from('products')
-      .insert({
-        id: product.id,
-        item_code: product.itemCode,
-        name: product.name,
-        category: product.category,
-        barcode: product.barcode,
-        qr_value: product.qrValue,
-        warranty_start: product.warrantyStart?.toISOString(),
-        warranty_end: product.warrantyEnd?.toISOString(),
-        warranty_duration: product.warrantyDuration,
-        user_mobile: user.mobile, // User isolation by mobile
-        created_at: product.createdAt.toISOString(),
-        updated_at: product.updatedAt?.toISOString() || product.createdAt.toISOString(),
-      })
-      .select('id')
-      .single();
-
+    const mobile = sessionLoginKey();
+    const uid = await requireUid();
+    const sb = getSupabaseBrowserClient();
+    const { error } = await sb.from('products').insert({
+      id: product.id,
+      owner_uid: uid,
+      user_mobile: mobile,
+      item_code: product.itemCode,
+      name: product.name,
+      category: product.category,
+      barcode: product.barcode ?? null,
+      qr_value: product.qrValue,
+      warranty_start: product.warrantyStart?.toISOString() ?? null,
+      warranty_end: product.warrantyEnd?.toISOString() ?? null,
+      warranty_duration: product.warrantyDuration ?? null,
+      location: product.location ?? null,
+      notes: product.notes ?? null,
+      purchase_price: product.purchasePrice ?? null,
+      currency: product.currency ?? null,
+      created_at: product.createdAt.toISOString(),
+      updated_at: (product.updatedAt ?? product.createdAt).toISOString(),
+    });
     if (error) throw error;
-    return data.id;
+    return product.id;
   },
 
   async updateProduct(id: string, changes: Partial<Product>): Promise<number> {
-    const updateData: any = {
+    const mobile = sessionLoginKey();
+    const uid = await requireUid();
+    const sb = getSupabaseBrowserClient();
+    const { data: existing, error: readErr } = await sb.from('products').select('*').eq('id', id).maybeSingle();
+    if (readErr || !existing) return 0;
+    const prev = existing as Record<string, unknown>;
+    if (!canAccessProduct(prev, mobile, uid)) return 0;
+
+    const payload: Record<string, unknown> = {
       updated_at: new Date().toISOString(),
     };
-    
-    if (changes.itemCode !== undefined) updateData.item_code = changes.itemCode;
-    if (changes.name !== undefined) updateData.name = changes.name;
-    if (changes.category !== undefined) updateData.category = changes.category;
-    if (changes.barcode !== undefined) updateData.barcode = changes.barcode;
-    if (changes.qrValue !== undefined) updateData.qr_value = changes.qrValue;
-    if (changes.warrantyStart !== undefined) updateData.warranty_start = changes.warrantyStart?.toISOString();
-    if (changes.warrantyEnd !== undefined) updateData.warranty_end = changes.warrantyEnd?.toISOString();
-    if (changes.warrantyDuration !== undefined) updateData.warranty_duration = changes.warrantyDuration;
+    if (changes.itemCode !== undefined) payload.item_code = changes.itemCode;
+    if (changes.name !== undefined) payload.name = changes.name;
+    if (changes.category !== undefined) payload.category = changes.category;
+    if (changes.barcode !== undefined) payload.barcode = changes.barcode ?? null;
+    if (changes.qrValue !== undefined) payload.qr_value = changes.qrValue;
+    if (changes.warrantyStart !== undefined) {
+      payload.warranty_start = changes.warrantyStart ? changes.warrantyStart.toISOString() : null;
+    }
+    if (changes.warrantyEnd !== undefined) {
+      payload.warranty_end = changes.warrantyEnd ? changes.warrantyEnd.toISOString() : null;
+    }
+    if (changes.warrantyDuration !== undefined) payload.warranty_duration = changes.warrantyDuration ?? null;
+    if (changes.location !== undefined) payload.location = changes.location ?? null;
+    if (changes.notes !== undefined) payload.notes = changes.notes ?? null;
+    if (changes.purchasePrice !== undefined) payload.purchase_price = changes.purchasePrice ?? null;
+    if (changes.currency !== undefined) payload.currency = changes.currency ?? null;
+    if (!prev.owner_uid) payload.owner_uid = uid;
 
-    const { error, count } = await supabase
-      .from('products')
-      .update(updateData)
-      .eq('id', id)
-      .select('id', { count: 'exact', head: true });
-
+    const { error } = await sb.from('products').update(payload).eq('id', id);
     if (error) throw error;
-    return count || 0;
+    return 1;
   },
 
   async deleteProduct(id: string): Promise<void> {
-    const { error } = await supabase
-      .from('products')
-      .delete()
-      .eq('id', id);
+    const mobile = sessionLoginKey();
+    const uid = await requireUid();
+    const sb = getSupabaseBrowserClient();
+    const { data: existing, error: readErr } = await sb.from('products').select('*').eq('id', id).maybeSingle();
+    if (readErr || !existing) return;
+    const pdata = existing as Record<string, unknown>;
+    if (!canAccessProduct(pdata, mobile, uid)) return;
 
-    if (error) throw error;
-
-    // Also delete warranty documents
-    await supabase
+    const { data: wRows } = await sb
       .from('warranty_documents')
-      .delete()
-      .eq('product_id', id);
+      .select('id, storage_path')
+      .eq('product_id', id)
+      .or(`user_mobile.eq.${mobile},owner_uid.eq.${uid}`);
+    const seen = new Set<string>();
+    for (const w of wRows ?? []) {
+      const wid = w.id as string;
+      if (seen.has(wid)) continue;
+      seen.add(wid);
+      const path = w.storage_path as string | undefined;
+      if (path) {
+        await sb.storage.from(BUCKET).remove([path]).catch(() => {});
+      }
+      await sb.from('warranty_documents').delete().eq('id', wid);
+    }
+    await sb.from('products').delete().eq('id', id);
   },
 
-  async searchProducts(query: string): Promise<Product[]> {
-    const user = simpleAuth.getCurrentUser();
-    if (!user) throw new Error('User not authenticated');
-
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('user_mobile', user.mobile) // Filter by user's mobile
-      .or(`name.ilike.%${query}%,item_code.ilike.%${query}%,category.ilike.%${query}%`)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    
-    return (data || []).map((row: any) => ({
-      id: row.id,
-      itemCode: row.item_code,
-      name: row.name,
-      category: row.category,
-      barcode: row.barcode,
-      qrValue: row.qr_value,
-      warrantyStart: row.warranty_start ? new Date(row.warranty_start) : undefined,
-      warrantyEnd: row.warranty_end ? new Date(row.warranty_end) : undefined,
-      warrantyDuration: row.warranty_duration,
-      createdAt: new Date(row.created_at),
-      updatedAt: row.updated_at ? new Date(row.updated_at) : undefined,
-    }));
+  async searchProducts(search: string): Promise<Product[]> {
+    const q = search.trim().toLowerCase();
+    if (!q) return this.getAllProducts();
+    const all = await this.getAllProducts();
+    return all.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.itemCode.toLowerCase().includes(q) ||
+        p.category.toLowerCase().includes(q) ||
+        p.barcode?.toLowerCase().includes(q) ||
+        p.notes?.toLowerCase().includes(q) ||
+        p.location?.toLowerCase().includes(q)
+    );
   },
 
   async getByCategory(category: string): Promise<Product[]> {
-    const user = simpleAuth.getCurrentUser();
-    if (!user) throw new Error('User not authenticated');
-
-    const { data, error } = await supabase
-      .from('products')
-      .select('*')
-      .eq('user_mobile', user.mobile) // Filter by user's mobile
-      .eq('category', category)
-      .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    
-    return (data || []).map((row: any) => ({
-      id: row.id,
-      itemCode: row.item_code,
-      name: row.name,
-      category: row.category,
-      barcode: row.barcode,
-      qrValue: row.qr_value,
-      warrantyStart: row.warranty_start ? new Date(row.warranty_start) : undefined,
-      warrantyEnd: row.warranty_end ? new Date(row.warranty_end) : undefined,
-      warrantyDuration: row.warranty_duration,
-      createdAt: new Date(row.created_at),
-      updatedAt: row.updated_at ? new Date(row.updated_at) : undefined,
-    }));
+    const mobile = sessionLoginKey();
+    const uid = await requireUid();
+    const sb = getSupabaseBrowserClient();
+    const merged = new Map<string, Product>();
+    for (const [col, val] of [
+      ['user_mobile', mobile],
+      ['owner_uid', uid],
+    ] as const) {
+      const { data } = await sb.from('products').select('*').eq(col, val).eq('category', category);
+      for (const row of data ?? []) {
+        merged.set(row.id as string, mapProductRow(row as Record<string, unknown>));
+      }
+    }
+    return [...merged.values()].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   },
 
-  // Warranty Documents
   async getByProductId(productId: string): Promise<WarrantyDocument | undefined> {
-    const user = simpleAuth.getCurrentUser();
-    if (!user) {
-      console.error('User not authenticated when trying to get warranty document');
-      return undefined; // Return undefined instead of throwing for better UX
-    }
-
+    let mobile: string;
+    let uid: string;
     try {
-      const { data, error } = await supabase
+      mobile = sessionLoginKey();
+      uid = await requireUid();
+    } catch {
+      return undefined;
+    }
+    const sb = getSupabaseBrowserClient();
+    try {
+      const { data: rows } = await sb
         .from('warranty_documents')
         .select('*')
         .eq('product_id', productId)
-        .eq('user_mobile', user.mobile) // Ensure user owns this warranty
-        .single();
+        .or(`user_mobile.eq.${mobile},owner_uid.eq.${uid}`)
+        .limit(1);
+      const row = rows?.[0] as Record<string, unknown> | undefined;
+      if (!row) return undefined;
 
-      if (error) {
-        if (error.code === 'PGRST116') {
-          // Not found - this is normal, return undefined
-          return undefined;
-        }
-        console.error('Supabase error getting warranty document:', error);
-        throw error;
-      }
+      const storagePath = row.storage_path as string | undefined;
+      const downloadURL = row.download_url as string | undefined;
+      const imageData = row.image_data as string | undefined;
 
-      if (!data || !data.image_data) {
-        console.warn('Warranty document found but has no image data');
-        return undefined;
-      }
-      
-      // Convert base64 data URL back to Blob
       let blob: Blob;
-      try {
-        if (typeof data.image_data !== 'string') {
-          console.error('Image data is not a string:', typeof data.image_data);
-          throw new Error('Invalid image data format');
-        }
-
-        if (data.image_data.startsWith('data:')) {
-          // Already a data URL - extract base64 part and convert
-          const base64Match = data.image_data.match(/^data:image\/\w+;base64,(.+)$/);
-          if (base64Match && base64Match[1]) {
-            // Convert base64 string to binary
-            const binaryString = atob(base64Match[1]);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
-            }
-            // Determine MIME type from data URL
-            const mimeMatch = data.image_data.match(/^data:(image\/\w+);base64,/);
-            const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
-            blob = new Blob([bytes], { type: mimeType });
-          } else {
-            // Fallback: try fetch (may fail for large images)
-            const response = await fetch(data.image_data);
-            blob = await response.blob();
-          }
-        } else {
-          // Assume it's raw base64, convert to blob
-          try {
-            const binaryString = atob(data.image_data);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-              bytes[i] = binaryString.charCodeAt(i);
-            }
-            blob = new Blob([bytes], { type: 'image/png' });
-          } catch (base64Error) {
-            // Fallback: try with data URL prefix
-            const base64Response = await fetch(`data:image/png;base64,${data.image_data}`);
-            blob = await base64Response.blob();
-          }
-        }
-      } catch (blobError) {
-        console.error('Error converting warranty image data to blob:', blobError);
-        throw new Error('Failed to process warranty image data');
+      if (downloadURL) {
+        const res = await fetch(downloadURL);
+        blob = await res.blob();
+      } else if (storagePath) {
+        const { data: signed, error } = await sb.storage.from(BUCKET).createSignedUrl(storagePath, 3600);
+        if (error || !signed?.signedUrl) return undefined;
+        const res = await fetch(signed.signedUrl);
+        blob = await res.blob();
+      } else if (imageData) {
+        blob = await imageDataToBlob(imageData);
+      } else {
+        return undefined;
       }
 
       return {
-        id: data.id,
-        productId: data.product_id,
+        id: row.id as string,
+        productId: (row.product_id as string) || productId,
         imageBlob: blob,
-        extractedText: data.extracted_text,
-        createdAt: new Date(data.created_at),
+        extractedText: row.extracted_text as string | undefined,
+        createdAt: toDate(row.created_at) || new Date(),
       };
-    } catch (err: any) {
-      console.error('Error in getByProductId:', err);
-      // Return undefined instead of throwing to allow the page to still show product info
+    } catch (e) {
+      console.error('Supabase warranty read error:', e);
       return undefined;
     }
   },
 
   async add(document: WarrantyDocument): Promise<string> {
-    const user = simpleAuth.getCurrentUser();
-    if (!user) throw new Error('User not authenticated');
+    const mobile = sessionLoginKey();
+    const uid = await requireUid();
+    const sb = getSupabaseBrowserClient();
+    const objectPath = `${uid}/${document.productId}/${document.id}`;
+    const { error: upErr } = await sb.storage
+      .from(BUCKET)
+      .upload(objectPath, document.imageBlob, {
+        contentType: document.imageBlob.type || 'image/jpeg',
+        upsert: true,
+      });
+    if (upErr) throw upErr;
 
-    // Convert Blob to base64 data URL
-    const base64 = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = reject;
-      reader.readAsDataURL(document.imageBlob);
+    const { error } = await sb.from('warranty_documents').insert({
+      id: document.id,
+      owner_uid: uid,
+      user_mobile: mobile,
+      product_id: document.productId,
+      storage_path: objectPath,
+      download_url: null,
+      image_data: null,
+      extracted_text: document.extractedText ?? null,
+      created_at: document.createdAt.toISOString(),
     });
-
-    const { data, error } = await supabase
-      .from('warranty_documents')
-      .insert({
-        id: document.id,
-        product_id: document.productId,
-        image_data: base64,
-        extracted_text: document.extractedText,
-        user_mobile: user.mobile, // User isolation by mobile
-        created_at: document.createdAt.toISOString(),
-      })
-      .select('id')
-      .single();
-
     if (error) throw error;
-    return data.id;
+    return document.id;
   },
 
   async delete(id: string): Promise<void> {
-    const { error } = await supabase
-      .from('warranty_documents')
-      .delete()
-      .eq('id', id);
-
-    if (error) throw error;
+    const mobile = sessionLoginKey();
+    const uid = await requireUid();
+    const sb = getSupabaseBrowserClient();
+    const { data: row, error: readErr } = await sb.from('warranty_documents').select('*').eq('id', id).maybeSingle();
+    if (readErr || !row) return;
+    const data = row as Record<string, unknown>;
+    if (!canAccessProduct(data, mobile, uid)) return;
+    const path = data.storage_path as string | undefined;
+    if (path) {
+      await sb.storage.from(BUCKET).remove([path]).catch(() => {});
+    }
+    await sb.from('warranty_documents').delete().eq('id', id);
   },
 
   async deleteByProductId(productId: string): Promise<void> {
-    const { error } = await supabase
+    const mobile = sessionLoginKey();
+    const uid = await requireUid();
+    const sb = getSupabaseBrowserClient();
+    const { data: rows } = await sb
       .from('warranty_documents')
-      .delete()
-      .eq('product_id', productId);
-
-    if (error) throw error;
+      .select('id')
+      .eq('product_id', productId)
+      .or(`user_mobile.eq.${mobile},owner_uid.eq.${uid}`);
+    const seen = new Set<string>();
+    for (const w of rows ?? []) {
+      const wid = w.id as string;
+      if (seen.has(wid)) continue;
+      seen.add(wid);
+      await this.delete(wid);
+    }
   },
 };
 
+export const supabaseProductDb = {
+  getAll: () => supabaseDb.getAllProducts(),
+  getById: (id: string) => supabaseDb.getProductById(id),
+  getByItemCode: (code: string) => supabaseDb.getProductByItemCode(code),
+  add: (product: Product) => supabaseDb.addProduct(product),
+  update: (id: string, changes: Partial<Product>) => supabaseDb.updateProduct(id, changes),
+  delete: (id: string) => supabaseDb.deleteProduct(id),
+  search: (q: string) => supabaseDb.searchProducts(q),
+  getByCategory: (category: string) => supabaseDb.getByCategory(category),
+};
+
+export const supabaseWarrantyDb = {
+  getByProductId: (productId: string) => supabaseDb.getByProductId(productId),
+  add: (document: WarrantyDocument) => supabaseDb.add(document),
+  delete: (id: string) => supabaseDb.delete(id),
+  deleteByProductId: (productId: string) => supabaseDb.deleteByProductId(productId),
+};

@@ -53,7 +53,9 @@ describe('Home - Page Functional Tests', () => {
   describe('Rendering', () => {
     it('should render home page with title', () => {
       renderHome();
-      expect(screen.getByText('Home Inventory')).toBeInTheDocument();
+      expect(
+        screen.getByRole('heading', { name: /Initra.*Home Inventory|Home Inventory/i })
+      ).toBeInTheDocument();
     });
 
     it('should render all navigation cards', () => {

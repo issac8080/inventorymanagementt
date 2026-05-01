@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { BrowserRouter, MemoryRouter } from 'react-router-dom';
-import { productDb, warrantyDb } from '@/services/database/localDb';
+import { productDb, warrantyDb } from '@/services/database/db';
 import { Product, WarrantyDocument } from '@/types';
 import { generateUUID } from '@/utils/uuid';
 import { useProductStore } from '@/stores/productStore';
@@ -11,7 +10,26 @@ import { validateProduct, validateBarcode } from '@/utils/validation';
 import App from '@/App';
 
 // Mock dependencies
-vi.mock('@/services/database/localDb');
+vi.mock('@/services/database/db', () => ({
+  productDb: {
+    getAll: vi.fn(),
+    getById: vi.fn(),
+    add: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    search: vi.fn(),
+    getByItemCode: vi.fn(),
+    getByCategory: vi.fn(),
+  },
+  warrantyDb: {
+    getByProductId: vi.fn(),
+    add: vi.fn(),
+    delete: vi.fn(),
+    deleteByProductId: vi.fn(),
+  },
+  isUsingLocalDatabase: () => true,
+  isUsingFirebase: () => false,
+}));
 vi.mock('@/utils/sounds', () => ({ playBeep: vi.fn() }));
 vi.mock('react-hot-toast', () => ({
   default: { success: vi.fn(), error: vi.fn() },
@@ -22,6 +40,37 @@ vi.mock('@/components/scanner/QRScanner', () => ({
   QRScanner: () => <div data-testid="qr-scanner">Scanner</div>,
 }));
 vi.mock('@/components/assistant/Chatbot', () => ({ Chatbot: () => <div>Chatbot</div> }));
+
+vi.mock('@/services/auth/simpleAuth', () => {
+  const sessionUser = {
+    id: 'vitest-user',
+    mobile: 'vitest',
+    password: '',
+    username: 'Vitest',
+    created_at: new Date().toISOString(),
+  };
+  return {
+    simpleAuth: {
+      getCurrentUser: vi.fn(() => sessionUser),
+      initCloudAuthSync: vi.fn(() => () => {}),
+      isCurrentUserAdmin: vi.fn(() => false),
+      saveUser: vi.fn(),
+      logout: vi.fn(),
+      continueAsLocalDevice: vi.fn(),
+      login: vi.fn(),
+      getAllUsers: vi.fn(),
+      createUser: vi.fn(),
+      deleteUser: vi.fn(),
+    },
+    LOCAL_OFFLINE_USER: {
+      id: '00000000-0000-4000-8000-000000000001',
+      mobile: 'local-device',
+      password: '',
+      username: 'This device',
+      created_at: new Date().toISOString(),
+    },
+  };
+});
 
 describe('Regression Tests - Ensure Existing Features Still Work', () => {
   let testProduct: Product;
@@ -123,26 +172,21 @@ describe('Regression Tests - Ensure Existing Features Still Work', () => {
 
   describe('UI Components Regression', () => {
     it('should still render home page correctly', async () => {
-      render(
-        <MemoryRouter>
-          <App />
-        </MemoryRouter>
-      );
+      render(<App />);
       
       await waitFor(() => {
-        expect(screen.getByText('Home Inventory')).toBeInTheDocument();
+        expect(
+          screen.getByRole('heading', { name: /Initra.*Home Inventory|Home Inventory/i })
+        ).toBeInTheDocument();
       });
     });
 
     it('should still render navigation links', () => {
-      render(
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      );
-      
-      // Navigation should be present
-      expect(screen.getByText('Home Inventory')).toBeInTheDocument();
+      render(<App />);
+
+      expect(
+        screen.getByRole('heading', { name: /Initra.*Home Inventory|Home Inventory/i })
+      ).toBeInTheDocument();
     });
   });
 

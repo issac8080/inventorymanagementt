@@ -5,6 +5,7 @@ import { Card } from '@/components/common/Card';
 import { ConfirmationDialog } from '@/components/common/ConfirmationDialog';
 import { downloadDatabaseExport, importDatabase, clearDatabase } from '@/utils/databaseExport';
 import { validateFile } from '@/utils/validation';
+import { isUsingLocalDatabase } from '@/services/database/db';
 import toast from 'react-hot-toast';
 import { playBeep } from '@/utils/sounds';
 
@@ -78,6 +79,15 @@ export default function Settings() {
       </div>
 
       <div className="space-y-6">
+        {isUsingLocalDatabase() && (
+          <Card className="border-2 border-amber-300 bg-amber-50">
+            <h2 className="text-xl font-bold text-amber-900 mb-2">On-device mode</h2>
+            <p className="text-lg text-amber-900">
+              Your inventory is stored in this browser only. Export backups regularly from this page. To sync across
+              devices, configure Firebase (see .env.example), deploy Firestore rules, and sign in with your account.
+            </p>
+          </Card>
+        )}
         {/* Data Management */}
         <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200">
           <h2 className="text-2xl font-bold mb-4">Data Management</h2>

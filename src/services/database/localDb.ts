@@ -49,7 +49,8 @@ export const productDb = {
   },
 
   async add(product: Product): Promise<string> {
-    return await db.products.add(product);
+    const key = await db.products.add(product);
+    return String(key);
   },
 
   async update(id: string, changes: Partial<Product>): Promise<number> {
@@ -65,11 +66,16 @@ export const productDb = {
   async search(query: string): Promise<Product[]> {
     const lowerQuery = query.toLowerCase();
     return await db.products
-      .filter(p => 
-        p.name.toLowerCase().includes(lowerQuery) ||
-        p.itemCode.toLowerCase().includes(lowerQuery) ||
-        p.category.toLowerCase().includes(lowerQuery)
-      )
+      .filter((p) => {
+        const inBasic =
+          p.name.toLowerCase().includes(lowerQuery) ||
+          p.itemCode.toLowerCase().includes(lowerQuery) ||
+          p.category.toLowerCase().includes(lowerQuery);
+        const inBarcode = p.barcode?.toLowerCase().includes(lowerQuery);
+        const inLocation = p.location?.toLowerCase().includes(lowerQuery);
+        const inNotes = p.notes?.toLowerCase().includes(lowerQuery);
+        return inBasic || !!inBarcode || !!inLocation || !!inNotes;
+      })
       .toArray();
   },
 
@@ -84,7 +90,8 @@ export const warrantyDb = {
   },
 
   async add(document: WarrantyDocument): Promise<string> {
-    return await db.warrantyDocuments.add(document);
+    const key = await db.warrantyDocuments.add(document);
+    return String(key);
   },
 
   async delete(id: string): Promise<void> {
